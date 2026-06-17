@@ -12,16 +12,16 @@ export const maxDuration = 60
 
 export async function POST(
   req: Request,
-  { params }: { params: { projectId: string } },
+  { params }: { params: Promise<{ projectId: string }> },
 ) {
+  const { projectId } = await params
   const auth = await requireUserId(req)
   if (auth.error) return auth.error
 
-  // Fetch project and verify ownership
   const { data: project, error: projectError } = await supabaseAdmin
     .from("projects")
     .select("*")
-    .eq("id", params.projectId)
+    .eq("id", projectId)
     .eq("user_id", auth.userId)
     .single()
 
@@ -45,15 +45,11 @@ export async function POST(
   const brief = project.brief
 
   try {
-    // 1. Generate name candidates via LLM
     const candidates = await generateNameCandidates(brief, count)
-
-    // 2. Score candidates via LLM (subjective scores only — no total)
     const subjectiveScores = await scoreNameCandidates(brief, candidates)
 
-    // 3. Persist candidates
     const candidateInserts = candidates.map((c) => ({
-      project_id: params.projectId,
+      project_id: projectId,
       name: c.name,
       rationale: c.rationale,
     }))
@@ -67,7 +63,6 @@ export async function POST(
       return fail("INTERNAL_ERROR", insertError.message, 500)
     }
 
-    // 4. Compute deterministic total score and persist
     const scoreInserts = insertedCandidates
       .map((candidate) => {
         const subjective = subjectiveScores[candidate.name]
@@ -75,13 +70,13 @@ export async function POST(
 
         const breakdown = computeScore({
           subjective,
-          domains: [], // domain facts not yet available at generation time
+          domains: [],
           trademark: "incomplete",
         })
 
         return {
           candidate_id: candidate.id,
-          project_id: params.projectId,
+          project_id: projectId,
           brandability: subjective.brandability,
           memorability: subjective.memorability,
           pronounceability: subjective.pronounceability,
@@ -104,7 +99,7 @@ export async function POST(
 
     await trackEvent({
       userId: auth.userId,
-      projectId: params.projectId,
+      projectId,
       type: "names_generated",
       properties: { count: candidates.length },
     })

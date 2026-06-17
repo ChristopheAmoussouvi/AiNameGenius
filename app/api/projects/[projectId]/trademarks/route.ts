@@ -8,15 +8,16 @@ export const runtime = "nodejs"
 
 export async function POST(
   req: Request,
-  { params }: { params: { projectId: string } },
+  { params }: { params: Promise<{ projectId: string }> },
 ) {
+  const { projectId } = await params
   const auth = await requireUserId(req)
   if (auth.error) return auth.error
 
   const { data: project } = await supabaseAdmin
     .from("projects")
     .select("id")
-    .eq("id", params.projectId)
+    .eq("id", projectId)
     .eq("user_id", auth.userId)
     .maybeSingle()
 
@@ -25,7 +26,7 @@ export async function POST(
   const idempotencyKey = getIdempotencyKey(req) ?? undefined
 
   const job = await createJob({
-    projectId: params.projectId,
+    projectId,
     userId: auth.userId,
     type: "trademark_check",
     idempotencyKey,

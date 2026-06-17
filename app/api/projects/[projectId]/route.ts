@@ -6,8 +6,9 @@ export const runtime = "nodejs"
 
 export async function GET(
   req: Request,
-  { params }: { params: { projectId: string } },
+  { params }: { params: Promise<{ projectId: string }> },
 ) {
+  const { projectId } = await params
   const auth = await requireUserId(req)
   if (auth.error) return auth.error
 
@@ -24,7 +25,7 @@ export async function GET(
       brand_kits(*)
     `,
     )
-    .eq("id", params.projectId)
+    .eq("id", projectId)
     .eq("user_id", auth.userId)
     .single()
 
@@ -37,15 +38,16 @@ export async function GET(
 
 export async function DELETE(
   req: Request,
-  { params }: { params: { projectId: string } },
+  { params }: { params: Promise<{ projectId: string }> },
 ) {
+  const { projectId } = await params
   const auth = await requireUserId(req)
   if (auth.error) return auth.error
 
   const { error } = await supabaseAdmin
     .from("projects")
     .delete()
-    .eq("id", params.projectId)
+    .eq("id", projectId)
     .eq("user_id", auth.userId)
 
   if (error) return fail("INTERNAL_ERROR", error.message, 500)

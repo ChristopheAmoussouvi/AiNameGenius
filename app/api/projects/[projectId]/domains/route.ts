@@ -13,16 +13,16 @@ export const maxDuration = 60
 
 export async function POST(
   req: Request,
-  { params }: { params: { projectId: string } },
+  { params }: { params: Promise<{ projectId: string }> },
 ) {
+  const { projectId } = await params
   const auth = await requireUserId(req)
   if (auth.error) return auth.error
 
-  // Verify project ownership
   const { data: project } = await supabaseAdmin
     .from("projects")
     .select("id")
-    .eq("id", params.projectId)
+    .eq("id", projectId)
     .eq("user_id", auth.userId)
     .maybeSingle()
 
@@ -56,7 +56,7 @@ export async function POST(
 
     await trackEvent({
       userId: auth.userId,
-      projectId: params.projectId,
+      projectId,
       type: "domains_checked",
       properties: { count: results.length },
     })
