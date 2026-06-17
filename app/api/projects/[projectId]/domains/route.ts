@@ -3,7 +3,7 @@ import { requireUserId } from "@/lib/auth/current-user"
 import { ok, fail } from "@/lib/api/response"
 import { supabaseAdmin } from "@/lib/supabase/server"
 import { checkDomainsRdap } from "@/lib/domain/rdap"
-import { buildNamecheapAffiliateUrl } from "@/lib/domain/affiliate"
+import { buildAffiliateLinks } from "@/lib/domain/affiliate"
 import { toDomainSld } from "@/lib/projects/normalize"
 import { DomainCheckSchema } from "@/lib/validation/project"
 import { trackEvent } from "@/lib/events/track"
@@ -48,10 +48,7 @@ export async function POST(
 
     const enriched = results.map((r) => ({
       ...r,
-      affiliateUrl:
-        r.status === "available"
-          ? buildNamecheapAffiliateUrl(r.name, r.tld)
-          : null,
+      buyLinks: r.status === "available" ? buildAffiliateLinks(r.name, r.tld) : null,
     }))
 
     await trackEvent({
