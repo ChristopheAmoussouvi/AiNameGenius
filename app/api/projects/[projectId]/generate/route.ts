@@ -96,7 +96,7 @@ export async function POST(
           total: breakdown.total,
         }
       })
-      .filter(Boolean)
+      .filter((s): s is NonNullable<typeof s> => s !== null)
 
     if (scoreInserts.length > 0) {
       await supabaseAdmin.from("scores").insert(scoreInserts)
