@@ -30,10 +30,14 @@ _Dernière mise à jour : 17 juin 2026 — auto-mis à jour à chaque commit_
 - [x] RDAP `.com` et `.fr`
 - [x] RDAP étendu à `.net`, `.org`, `.io`, `.co`, `.ai`, `.eu` (8 TLDs au total)
 
-### Marques (INPI / EUIPO)
-- [ ] Intégrer INPI Data API (data.inpi.fr) ou EUIPO eSearch+
-- [ ] Implémenter `lib/trademark/inpi.ts`
-- [ ] Connecter à la route `/trademarks`
+### Marques (INPI)
+- [x] `lib/trademark/inpi.ts` — client INPI Data API (Bearer token)
+- [x] `lib/trademark/check.ts` — orchestrateur avec niveaux de risque (clear / caution / conflict / incomplete)
+- [x] Route `/trademarks` connectée — persiste dans `trademark_results`
+- [x] Migration `0003_trademark_unique.sql` — contrainte unique pour upsert
+- [ ] **ACTION** : S'inscrire sur https://data.inpi.fr/register et obtenir `INPI_API_KEY`
+- [ ] Ajouter `INPI_API_KEY` dans Vercel env vars
+- [ ] Appliquer la migration `0003` dans le SQL Editor Supabase
 
 ### Frontend
 - [ ] Page d'accueil + formulaire brief

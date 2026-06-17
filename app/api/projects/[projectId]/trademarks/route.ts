@@ -1,10 +1,15 @@
 import { requireUserId } from "@/lib/auth/current-user"
 import { ok, fail } from "@/lib/api/response"
 import { supabaseAdmin } from "@/lib/supabase/server"
-import { createJob } from "@/lib/jobs/jobs"
-import { getIdempotencyKey } from "@/lib/api/response"
+import { checkTrademarks } from "@/lib/trademark/check"
+import { z } from "zod"
 
 export const runtime = "nodejs"
+export const maxDuration = 60
+
+const TrademarkCheckSchema = z.object({
+  names: z.array(z.string().min(1).max(100)).min(1).max(30),
+})
 
 export async function POST(
   req: Request,
@@ -23,21 +28,43 @@ export async function POST(
 
   if (!project) return fail("NOT_FOUND", "Project not found.", 404)
 
-  const idempotencyKey = getIdempotencyKey(req) ?? undefined
+  let body: unknown
+  try {
+    body = await req.json()
+  } catch {
+    return fail("BAD_REQUEST", "Invalid JSON body.")
+  }
 
-  const job = await createJob({
-    projectId,
-    userId: auth.userId,
-    type: "trademark_check",
-    idempotencyKey,
+  const parsed = TrademarkCheckSchema.safeParse(body)
+  if (!parsed.success) {
+    return fail("BAD_REQUEST", "Validation error.", 400, parsed.error.flatten())
+  }
+
+  const { names } = parsed.data
+  const results = await checkTrademarks(names)
+
+  // Persist results to trademark_results for project history
+  const rows = results.map((r) => ({
+    project_id: projectId,
+    name: r.name,
+    jurisdiction: "FR",
+    status: r.risk,
+    raw: { total: r.total, hits: r.hits, source: r.source },
+    checked_at: new Date().toISOString(),
+  }))
+
+  await supabaseAdmin.from("trademark_results").upsert(rows, {
+    onConflict: "project_id,name,jurisdiction",
+    ignoreDuplicates: false,
   })
 
-  return ok(
-    {
-      jobId: job.id,
-      status: job.status,
-      note: "Trademark check via INPI/EUIPO is not yet connected. Connect the integration to enable real results.",
-    },
-    { status: 202 },
-  )
+  const hasIncomplete = results.some((r) => r.risk === "incomplete")
+
+  return ok({
+    results,
+    ...(hasIncomplete && {
+      warning:
+        "Some results are incomplete. Configure INPI_API_KEY to enable live trademark checks. Register at https://data.inpi.fr/register",
+    }),
+  })
 }
