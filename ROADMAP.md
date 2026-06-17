@@ -28,7 +28,7 @@ _Dernière mise à jour : 17 juin 2026 — auto-mis à jour à chaque commit_
 
 ### Disponibilité des domaines
 - [x] RDAP `.com` et `.fr`
-- [ ] Étendre à `.io`, `.co`, `.net`, `.org`, `.ai`, `.eu`
+- [x] RDAP étendu à `.net`, `.org`, `.io`, `.co`, `.ai`, `.eu` (8 TLDs au total)
 
 ### Marques (INPI / EUIPO)
 - [ ] Intégrer INPI Data API (data.inpi.fr) ou EUIPO eSearch+

@@ -19,7 +19,7 @@ AI-powered brand naming SaaS. Generates brandable names, checks domain availabil
 - **Framework**: Next.js 15 (App Router, pure API) · TypeScript · Vercel
 - **Database**: Supabase (PostgreSQL + Auth + RLS)
 - **AI**: OpenRouter → `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`
-- **Domains**: RDAP (Verisign `.com`, AFNIC `.fr`) — free, no API key
+- **Domains**: RDAP — `.com` `.net` `.org` `.io` `.co` `.ai` `.fr` `.eu` — free, no API key
 - **Affiliate**: Namecheap (GoDaddy + Hostinger — Sprint 1)
 - **Trademarks**: INPI / EUIPO (Sprint 1)
 - **Payments**: Stripe (Sprint 3)
