@@ -8,7 +8,13 @@ const TIMEOUT_MS = 4500
 
 const RDAP_ENDPOINTS: Record<string, string> = {
   ".com": "https://rdap.verisign.com/com/v1/domain/",
-  ".fr": "https://rdap.nic.fr/domain/",
+  ".net": "https://rdap.verisign.com/net/v1/domain/",
+  ".org": "https://rdap.publicinterestregistry.org/rdap/domain/",
+  ".io":  "https://rdap.nic.io/domain/",
+  ".co":  "https://rdap.nic.co/domain/",
+  ".ai":  "https://rdap.nic.ai/domain/",
+  ".fr":  "https://rdap.nic.fr/domain/",
+  ".eu":  "https://rdap.eu/domain/",
 }
 
 // Dependency-free bounded parallel map
