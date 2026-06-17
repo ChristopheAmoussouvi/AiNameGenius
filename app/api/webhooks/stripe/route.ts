@@ -1,5 +1,4 @@
 import { fail, ok } from "@/lib/api/response"
-import { supabaseAdmin } from "@/lib/supabase/server"
 
 // TODO: install stripe SDK and verify webhook signature
 // import Stripe from "stripe"
