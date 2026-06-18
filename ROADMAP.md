@@ -1,6 +1,6 @@
 # AINameGenius — Roadmap
 
-_Dernière mise à jour : 19 juin 2026 — Sprint 1 ✅ complet (backend + frontend) — auto-mis à jour à chaque commit_
+_Dernière mise à jour : 19 juin 2026 — Sprint 2 en cours — domaine ainamegenius.com configuré_
 
 ## Statut de déploiement
 
@@ -13,6 +13,8 @@ _Dernière mise à jour : 19 juin 2026 — Sprint 1 ✅ complet (backend + front
 | OpenRouter LLM | ✅ Connecté |
 | INPI Marques | ✅ Déployé |
 | Frontend Landing Page | ✅ Déployé |
+| Domaine ainamegenius.com | ✅ Configuré (IONOS + Vercel) |
+| Pages auth /login /signup | ✅ Déployées |
 
 ---
 
@@ -53,15 +55,17 @@ _Dernière mise à jour : 19 juin 2026 — Sprint 1 ✅ complet (backend + front
 - [x] Détail des scores (expandable)
 - [x] Filtres : Tous / .com disponible / Faible risque
 - [x] Section "Comment ça marche" + badges flottants animés
-- [ ] Corriger URL redirect Supabase Auth (`localhost:3000` → URL Vercel)
-- [ ] Connecter le formulaire à la vraie API (nécessite pages auth)
+- [x] Corriger URL redirect Supabase Auth → `https://ainamegenius.com`
+- [x] Connecter le formulaire à la vraie API (auth requise)
 
 ---
 
 ## Sprint 2 — Produit complet (semaine 3-4)
 
-- [ ] Pages auth (`/login`, `/signup`) avec Supabase Auth UI
-- [ ] Connexion du formulaire landing → vraie API generate
+- [x] Pages auth (`/login`, `/signup`) — email/password + confirmation email
+- [x] `AuthProvider` + `useAuth()` hook — session persistante
+- [x] Connexion du formulaire landing → vraie API generate (quand connecté)
+- [x] Domaine `ainamegenius.com` — IONOS A record + Vercel + Supabase redirect URL
 - [ ] Page projet `/projects/[id]` — résultats réels depuis Supabase
 - [ ] Génération de logos (Stability AI ou Replicate)
 - [ ] Brand kit (couleurs, polices, tagline)

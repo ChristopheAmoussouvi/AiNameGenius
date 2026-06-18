@@ -40,7 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user: session?.user ?? null,
         session,
-        signOut: () => supabaseBrowser.auth.signOut(),
+        signOut: async () => { await supabaseBrowser.auth.signOut() },
         loading,
       }}
     >
