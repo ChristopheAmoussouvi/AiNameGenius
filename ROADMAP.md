@@ -15,6 +15,8 @@ _Dernière mise à jour : 19 juin 2026 — Sprint 2 en cours — domaine ainameg
 | Frontend Landing Page | ✅ Déployé |
 | Domaine ainamegenius.com | ✅ Configuré (IONOS + Vercel) |
 | Pages auth /login /signup | ✅ Déployées |
+| Page projet /projects/[id] | ✅ Déployée |
+| Historique /projects | ✅ Déployé |
 
 ---
 
@@ -66,7 +68,10 @@ _Dernière mise à jour : 19 juin 2026 — Sprint 2 en cours — domaine ainameg
 - [x] `AuthProvider` + `useAuth()` hook — session persistante
 - [x] Connexion du formulaire landing → vraie API generate (quand connecté)
 - [x] Domaine `ainamegenius.com` — IONOS A record + Vercel + Supabase redirect URL
-- [ ] Page projet `/projects/[id]` — résultats réels depuis Supabase
+- [x] Page projet `/projects/[id]` — résultats réels depuis Supabase (noms + scores + INPI + domaines)
+- [x] Historique `/projects` — liste des projets sauvegardés
+- [x] Composants de carte extraits dans `components/results.tsx` (partagés landing + projet)
+- [x] Fix bug merge trademark (`tmJson.data.results` au lieu de `tmJson.data`)
 - [ ] Génération de logos (Stability AI ou Replicate)
 - [ ] Brand kit (couleurs, polices, tagline)
 - [ ] Rapport PDF téléchargeable
