@@ -63,8 +63,8 @@ function parseTrademarksXml(xml: string): { total: number; hits: TrademarkHit[] 
       search?.results?.result ?? []
 
     const hits: TrademarkHit[] = results.map((result) => {
-      const fields: Array<Record<string, unknown>> =
-        (result as Record<string, unknown[]>)?.fields?.field ?? []
+      const resultFields = (result as { fields?: { field?: Array<Record<string, unknown>> } })?.fields?.field
+      const fields: Array<Record<string, unknown>> = Array.isArray(resultFields) ? resultFields : []
       return {
         name: getField(fields, "Mark"),
         status: getField(fields, "MarkCurrentStatusCode"),
@@ -83,11 +83,13 @@ function extractCookies(headers: Headers): {
   session: string | null
   xsrf: string | null
 } {
-  // Node.js 18+ fetch supports getSetCookie()
-  const setCookieHeader =
-    typeof (headers as Headers & { getSetCookie?: () => string[] }).getSetCookie === "function"
-      ? (headers as Headers & { getSetCookie: () => string[] }).getSetCookie()
-      : [headers.get("set-cookie") ?? ""]
+  // Node.js 18+ fetch supports getSetCookie() — cast to any to avoid TS lib mismatch
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const h = headers as any
+  const setCookieHeader: string[] =
+    typeof h.getSetCookie === "function"
+      ? (h.getSetCookie() as string[])
+      : [h.get("set-cookie") ?? ""]
 
   let session: string | null = null
   let xsrf: string | null = null
