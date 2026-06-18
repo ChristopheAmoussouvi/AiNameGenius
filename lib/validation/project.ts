@@ -25,5 +25,5 @@ export const GenerateNamesSchema = z.object({
 
 export const DomainCheckSchema = z.object({
   names: z.array(z.string().min(1)).min(1).max(50),
-  tlds: z.array(z.enum([".com", ".fr"])).min(1).max(5),
+  tlds: z.array(z.enum([".com", ".net", ".org", ".io", ".co", ".ai", ".fr", ".eu"])).min(1).max(8),
 })

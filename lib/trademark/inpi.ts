@@ -1,13 +1,13 @@
 // INPI API Gateway — Diffusion PI
-// Service: apidiffusion — https://api-gateway.inpi.fr/services/apidiffusion
-// Swagger: https://api-gateway.inpi.fr/swagger-ui/index.html (select "apidiffusion")
-//
-// Auth: JHipster UAA — OAuth2 password grant via gateway
-//   POST /oauth/token (client: web_app / changeit)
+// Endpoint: POST https://api-gateway.inpi.fr/services/apidiffusion/api/marques/search
+// Auth: JHipster session + XSRF-TOKEN cookie
+// Response: XML (application/xml)
 //
 // Required env vars:
 //   INPI_USERNAME=amoussouvichris+ainamegenius@gmail.com
 //   INPI_PASSWORD=<your password>
+
+import { XMLParser } from "fast-xml-parser"
 
 export type TrademarkRisk = "clear" | "caution" | "conflict" | "incomplete"
 
@@ -26,53 +26,135 @@ export type TrademarkResult = {
 }
 
 const GATEWAY = "https://api-gateway.inpi.fr"
-const TOKEN_URL = `${GATEWAY}/oauth/token`
 const SEARCH_URL = `${GATEWAY}/services/apidiffusion/api/marques/search`
-const TIMEOUT_MS = 12_000
+const AUTH_URL = `${GATEWAY}/api/authentication`
+const TIMEOUT_MS = 15_000
 
-// JHipster default client credentials (base64 of "web_app:changeit")
-const CLIENT_BASIC = "d2ViX2FwcDpjaGFuZ2VpdA=="
+// In-process session cache (resets on Vercel cold start)
+let sessionCookies: string | null = null
+let xsrfToken: string | null = null
+let sessionExpiresAt = 0
 
-// In-process token cache (resets on cold start / Vercel function restart)
-let cachedToken: string | null = null
-let tokenExpiresAt = 0
+const xmlParser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: "@_",
+  isArray: (name) => ["result", "field"].includes(name),
+  allowBooleanAttributes: true,
+})
 
-async function getToken(): Promise<string | null> {
-  const username = process.env.INPI_USERNAME
-  const password = process.env.INPI_PASSWORD
-  if (!username || !password) return null
+// Extract a named field value from the INPI fields array
+function getField(
+  fields: Array<Record<string, unknown>>,
+  name: string,
+): string {
+  const field = fields.find((f) => f["@_name"] === name)
+  if (!field) return ""
+  const val = field.value ?? (field.values as Record<string, unknown>)?.value
+  if (Array.isArray(val)) return String(val[0] ?? "")
+  return String(val ?? "")
+}
 
-  if (cachedToken && Date.now() < tokenExpiresAt - 30_000) return cachedToken
-
+function parseTrademarksXml(xml: string): { total: number; hits: TrademarkHit[] } {
   try {
-    const res = await fetch(TOKEN_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Authorization: `Basic ${CLIENT_BASIC}`,
-      },
-      body: new URLSearchParams({
-        grant_type: "password",
-        username,
-        password,
-        scope: "openid",
-      }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+    const doc = xmlParser.parse(xml)
+    const search = doc?.trademarkSearch
+    const total = Number(search?.metadata?.count ?? 0)
+    const results: Array<Record<string, unknown>> =
+      search?.results?.result ?? []
+
+    const hits: TrademarkHit[] = results.map((result) => {
+      const fields: Array<Record<string, unknown>> =
+        (result as Record<string, unknown[]>)?.fields?.field ?? []
+      return {
+        name: getField(fields, "Mark"),
+        status: getField(fields, "MarkCurrentStatusCode"),
+        applicationNumber: getField(fields, "ApplicationNumber") || undefined,
+      }
     })
 
-    if (!res.ok) {
-      console.error(`[trademark/inpi] token error ${res.status}`)
-      return null
+    return { total, hits }
+  } catch (err) {
+    console.error("[trademark/inpi] XML parse error:", err)
+    return { total: 0, hits: [] }
+  }
+}
+
+function extractCookies(headers: Headers): {
+  session: string | null
+  xsrf: string | null
+} {
+  // Node.js 18+ fetch supports getSetCookie()
+  const setCookieHeader =
+    typeof (headers as Headers & { getSetCookie?: () => string[] }).getSetCookie === "function"
+      ? (headers as Headers & { getSetCookie: () => string[] }).getSetCookie()
+      : [headers.get("set-cookie") ?? ""]
+
+  let session: string | null = null
+  let xsrf: string | null = null
+
+  for (const cookie of setCookieHeader) {
+    const parts = cookie.split(";")[0]
+    if (parts.startsWith("JSESSIONID=") || parts.startsWith("SESSION=")) {
+      session = parts
+    }
+    const xsrfMatch = cookie.match(/XSRF-TOKEN=([^;]+)/)
+    if (xsrfMatch) xsrf = decodeURIComponent(xsrfMatch[1])
+  }
+
+  return { session, xsrf }
+}
+
+async function login(): Promise<boolean> {
+  const username = process.env.INPI_USERNAME
+  const password = process.env.INPI_PASSWORD
+  if (!username || !password) return false
+
+  try {
+    // Step 1: get initial XSRF-TOKEN cookie from gateway
+    const initRes = await fetch(GATEWAY, {
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+    const { xsrf: initXsrf } = extractCookies(initRes.headers)
+    const csrf = initXsrf ?? ""
+
+    // Step 2: authenticate
+    const authRes = await fetch(AUTH_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-XSRF-TOKEN": csrf,
+        Cookie: `XSRF-TOKEN=${csrf}`,
+      },
+      body: JSON.stringify({ username, password, rememberMe: true }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      redirect: "manual",
+    })
+
+    if (!authRes.ok && authRes.status !== 302) {
+      console.error(`[trademark/inpi] login failed: ${authRes.status}`)
+      return false
     }
 
-    const data = await res.json()
-    cachedToken = data.access_token ?? null
-    tokenExpiresAt = Date.now() + (data.expires_in ?? 3600) * 1000
-    return cachedToken
+    const { session, xsrf: newXsrf } = extractCookies(authRes.headers)
+    if (!session) {
+      console.error("[trademark/inpi] no session cookie in auth response")
+      return false
+    }
+
+    sessionCookies = `${session}; XSRF-TOKEN=${newXsrf ?? csrf}`
+    xsrfToken = newXsrf ?? csrf
+    // Sessions last ~30 min; refresh after 25 min
+    sessionExpiresAt = Date.now() + 25 * 60 * 1000
+    return true
   } catch (err) {
-    console.error("[trademark/inpi] token fetch failed:", err)
-    return null
+    console.error("[trademark/inpi] login error:", err)
+    return false
   }
+}
+
+async function ensureSession(): Promise<boolean> {
+  if (sessionCookies && xsrfToken && Date.now() < sessionExpiresAt) return true
+  return login()
 }
 
 function isExactMatch(hit: string, query: string): boolean {
@@ -85,34 +167,52 @@ function isSimilar(hit: string, query: string): boolean {
   return h.startsWith(q) || q.startsWith(h) || h.includes(q) || q.includes(h)
 }
 
+// Only show active/registered trademarks as conflicts — expired ones are informational
+const ACTIVE_STATUSES = [
+  "marque enregistrée",
+  "marque renouvelée",
+  "marque publiée",
+  "registered",
+  "filed",
+]
+
+function isActive(status: string): boolean {
+  return ACTIVE_STATUSES.some((s) => status.toLowerCase().includes(s))
+}
+
 export async function checkTrademarkInpi(name: string): Promise<TrademarkResult> {
-  const token = await getToken()
-  if (!token) {
+  const ok = await ensureSession()
+  if (!ok) {
     return { risk: "incomplete", total: 0, hits: [], source: "inpi" }
   }
 
   try {
     const body = {
-      denomination: name,
-      office: ["FR", "EU"],
-      from: 0,
+      collections: ["FR", "EU"],
+      fields: ["ApplicationNumber", "Mark", "MarkCurrentStatusCode", "ukey"],
+      position: 0,
+      query: `[Mark=${name}]`,
       size: 10,
+      sortList: ["APPLICATION_DATE DESC", "MARK ASC"],
+      withCTMRevendication: false,
+      withFacets: false,
     }
 
     const res = await fetch(SEARCH_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
-        Accept: "application/json",
+        Accept: "application/xml",
+        Cookie: sessionCookies!,
+        "X-XSRF-TOKEN": xsrfToken!,
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
 
-    if (res.status === 401) {
-      cachedToken = null
-      console.error("[trademark/inpi] 401 — token expired, will refresh next call")
+    if (res.status === 401 || res.status === 403) {
+      sessionCookies = null // force re-login next call
+      console.error(`[trademark/inpi] ${res.status} — session expired`)
       return { risk: "incomplete", total: 0, hits: [], source: "inpi" }
     }
 
@@ -121,50 +221,20 @@ export async function checkTrademarkInpi(name: string): Promise<TrademarkResult>
       return { risk: "incomplete", total: 0, hits: [], source: "inpi" }
     }
 
-    const data = await res.json()
+    const xml = await res.text()
+    const { total, hits } = parseTrademarksXml(xml)
 
-    // Response shape: { total, results: [...] } or { hits: { total, hits: [...] } }
-    // Adjust once confirmed from Swagger UI "Try it out"
-    const trademarks: Array<Record<string, unknown>> =
-      data?.trademarks ??
-      data?.results ??
-      data?.hits?.hits ??
-      data?.content ??
-      []
-
-    const total: number =
-      data?.total ??
-      data?.hits?.total ??
-      data?.totalElements ??
-      trademarks.length
-
-    const hits: TrademarkHit[] = trademarks.map((t) => {
-      const denomination =
-        t.denomination ??
-        t.markLabel ??
-        t.trademarkName ??
-        t.name ??
-        t.titre ??
-        ""
-      return {
-        name: String(denomination),
-        status: String(t.status ?? t.etat ?? t.statusLabel ?? ""),
-        applicationNumber: t.applicationNumber
-          ? String(t.applicationNumber)
-          : t.numeroDepot
-            ? String(t.numeroDepot)
-            : undefined,
-        classes: Array.isArray(t.classes) ? (t.classes as number[]) : undefined,
-      }
-    })
-
-    const hasExact = hits.some((h) => isExactMatch(h.name, name))
-    const hasSimilar = hits.some((h) => isSimilar(h.name, name))
+    const activeHits = hits.filter((h) => isActive(h.status))
+    const hasExactActive = activeHits.some((h) => isExactMatch(h.name, name))
+    const hasSimilarActive = activeHits.some((h) => isSimilar(h.name, name))
 
     let risk: TrademarkRisk
-    if (hasExact) {
+    if (hasExactActive) {
       risk = "conflict"
-    } else if (hasSimilar || total > 0) {
+    } else if (hasSimilarActive) {
+      risk = "caution"
+    } else if (total > 0) {
+      // Expired/inactive trademarks found — low risk
       risk = "caution"
     } else {
       risk = "clear"

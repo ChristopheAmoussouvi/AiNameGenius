@@ -1,6 +1,6 @@
 # AINameGenius — Roadmap
 
-_Dernière mise à jour : 17 juin 2026 — auto-mis à jour à chaque commit_
+_Dernière mise à jour : 18 juin 2026 — auto-mis à jour à chaque commit_
 
 ## Statut de déploiement
 
@@ -29,22 +29,24 @@ _Dernière mise à jour : 17 juin 2026 — auto-mis à jour à chaque commit_
 ### Disponibilité des domaines
 - [x] RDAP `.com` et `.fr`
 - [x] RDAP étendu à `.net`, `.org`, `.io`, `.co`, `.ai`, `.eu` (8 TLDs au total)
+- [x] `DomainCheckSchema` mis à jour pour accepter les 8 TLDs
 
 ### Marques (INPI)
-- [x] `lib/trademark/inpi.ts` — client INPI Data API (Bearer token)
-- [x] `lib/trademark/check.ts` — orchestrateur avec niveaux de risque (clear / caution / conflict / incomplete)
+- [x] Compte INPI créé — ROLE_API_MARQUES accordé
+- [x] Format de réponse confirmé : **XML** avec syntaxe `[Mark=NOM]`
+- [x] Auth confirmée : session JHipster + XSRF-TOKEN (pas OAuth2)
+- [x] `lib/trademark/inpi.ts` réécrit — session-based auth, parsing XML (`fast-xml-parser`), niveaux de risque (clear / caution / conflict / incomplete)
+- [x] `lib/trademark/check.ts` — orchestrateur
 - [x] Route `/trademarks` connectée — persiste dans `trademark_results`
 - [x] Migration `0003_trademark_unique.sql` — contrainte unique pour upsert
-- [x] Compte INPI créé — ROLE_API_MARQUES accordé
-- [x] Base URL corrigée : `api-gateway.inpi.fr` (OAuth2 password flow)
-- [ ] **ACTION** : Ajouter `INPI_USERNAME` et `INPI_PASSWORD` dans Vercel env vars
-- [ ] Confirmer le chemin exact de l'endpoint dans https://api-gateway.inpi.fr/docs
-- [ ] Appliquer la migration `0003` dans le SQL Editor Supabase
+- [x] `fast-xml-parser` ajouté dans `package.json`
+- [ ] **ACTION CRITIQUE** : Ajouter `INPI_USERNAME` et `INPI_PASSWORD` dans Vercel env vars (Settings → Environment Variables)
+- [ ] **ACTION CRITIQUE** : Appliquer la migration `0003` dans le SQL Editor Supabase
 
 ### Frontend
 - [ ] Page d'accueil + formulaire brief
 - [ ] Page de résultats : noms + domaines + boutons "Acheter"
-- [ ] Corriger URL redirect Supabase Auth (actuellement `localhost:3000`)
+- [ ] Corriger URL redirect Supabase Auth (actuellement `localhost:3000` → URL Vercel)
 
 ---
 
@@ -82,17 +84,18 @@ _Dernière mise à jour : 17 juin 2026 — auto-mis à jour à chaque commit_
 | `NEXT_PUBLIC_SUPABASE_URL` | ✅ Configuré | supabase.com |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✅ Configuré | supabase.com |
 | `SUPABASE_SERVICE_ROLE_KEY` | ✅ Configuré | supabase.com |
+| `INPI_USERNAME` | ❌ À ajouter | api-gateway.inpi.fr (ton email INPI) |
+| `INPI_PASSWORD` | ❌ À ajouter | api-gateway.inpi.fr (ton mot de passe INPI) |
 | `AFFILIATE_NAMECHEAP_ID` | ❌ À ajouter | namecheap.com/affiliates |
 | `AFFILIATE_GODADDY_ID` | ❌ À ajouter | godaddy.com/affiliate-programs |
 | `AFFILIATE_HOSTINGER_ID` | ❌ À ajouter | hostinger.fr/affilies |
-| `INPI_API_KEY` | ❌ À ajouter | data.inpi.fr |
 | `STABILITY_API_KEY` | ❌ Sprint 2 | platform.stability.ai |
 | `STRIPE_SECRET_KEY` | ❌ Sprint 3 | dashboard.stripe.com |
 | `STRIPE_WEBHOOK_SECRET` | ❌ Sprint 3 | dashboard.stripe.com |
 
 ---
 
-## Réponse API `/domains` — format actuel
+## Format de la réponse API `/domains`
 
 ```json
 [
@@ -105,12 +108,29 @@ _Dernière mise à jour : 17 juin 2026 — auto-mis à jour à chaque commit_
       "godaddy": "https://www.godaddy.com/domainsearch/find?domainToCheck=Lumevo.com",
       "hostinger": "https://www.hostinger.fr/domaines?domain=Lumevo.com"
     }
-  },
-  {
-    "name": "NovaBrand",
-    "tld": ".com",
-    "status": "taken",
-    "buyLinks": null
   }
 ]
 ```
+
+## Format de la réponse API `/trademarks`
+
+```json
+[
+  {
+    "name": "Lumevo",
+    "risk": "clear",
+    "total": 0,
+    "hits": [],
+    "source": "inpi"
+  }
+]
+```
+
+## Architecture INPI (api-gateway.inpi.fr)
+
+- **Endpoint** : `POST /services/apidiffusion/api/marques/search`
+- **Auth** : Session JHipster + Cookie `XSRF-TOKEN` + header `X-XSRF-TOKEN`
+- **Login** : `POST /api/authentication` avec `{ username, password, rememberMe: true }`
+- **Format réponse** : XML (`application/xml`)
+- **Syntaxe requête** : `{ "query": "[Mark=NOM]", "collections": ["FR", "EU"], ... }`
+- **Champs retournés** : `Mark`, `MarkCurrentStatusCode`, `ApplicationNumber`, `ukey`
