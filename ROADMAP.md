@@ -35,8 +35,10 @@ _Dernière mise à jour : 17 juin 2026 — auto-mis à jour à chaque commit_
 - [x] `lib/trademark/check.ts` — orchestrateur avec niveaux de risque (clear / caution / conflict / incomplete)
 - [x] Route `/trademarks` connectée — persiste dans `trademark_results`
 - [x] Migration `0003_trademark_unique.sql` — contrainte unique pour upsert
-- [ ] **ACTION** : S'inscrire sur https://data.inpi.fr/register et obtenir `INPI_API_KEY`
-- [ ] Ajouter `INPI_API_KEY` dans Vercel env vars
+- [x] Compte INPI créé — ROLE_API_MARQUES accordé
+- [x] Base URL corrigée : `api-gateway.inpi.fr` (OAuth2 password flow)
+- [ ] **ACTION** : Ajouter `INPI_USERNAME` et `INPI_PASSWORD` dans Vercel env vars
+- [ ] Confirmer le chemin exact de l'endpoint dans https://api-gateway.inpi.fr/docs
 - [ ] Appliquer la migration `0003` dans le SQL Editor Supabase
 
 ### Frontend
