@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, type CSSProperties } from "react"
 import Image from "next/image"
+import { useAuth } from "@/lib/auth/context"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -136,9 +137,9 @@ function SkeletonCard() {
 }
 
 function TldButton({
-  cardIdx, tld, status, domLoading, buyOpen, onToggleBuy,
+  name, cardIdx, tld, status, domLoading, buyOpen, onToggleBuy,
 }: {
-  cardIdx: number; tld: string; status: DomStatus; domLoading: boolean
+  name: string; cardIdx: number; tld: string; status: DomStatus; domLoading: boolean
   buyOpen: string | null; onToggleBuy: (key: string | null) => void
 }) {
   const key = `${cardIdx}${tld}`
@@ -147,7 +148,6 @@ function TldButton({
   const menuOpen = buyOpen === key
   const statusColor = status === "available" ? "#6FCF97" : status === "premium" ? "#FFCF95" : "#F48F68"
   const statusLabel = status === "available" ? "Free" : status === "premium" ? "Prem" : "Taken"
-  const name = POOL[cardIdx]?.name ?? ""
 
   const baseBtn: CSSProperties = {
     width: "100%", display: "flex", flexDirection: "column", alignItems: "center",
@@ -257,7 +257,7 @@ function NameCard({
       {/* TLD grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(62px,1fr))", gap: 7, marginTop: 14 }}>
         {TLD_ORDER.map(tld => (
-          <TldButton key={tld} cardIdx={cardIdx} tld={tld} status={entry.dom[tld] ?? "taken"} domLoading={domLoading} buyOpen={buyOpen} onToggleBuy={onToggleBuy} />
+          <TldButton key={tld} name={entry.name} cardIdx={cardIdx} tld={tld} status={entry.dom[tld] ?? "taken"} domLoading={domLoading} buyOpen={buyOpen} onToggleBuy={onToggleBuy} />
         ))}
       </div>
 
@@ -291,9 +291,47 @@ function NameCard({
   )
 }
 
+// ─── API helpers ──────────────────────────────────────────────────────────────
+
+function mergeApiData(
+  candidates: Array<{ id: string; name: string; rationale: string }>,
+  scores: Array<{ candidate_id: string; brandability: number; memorability: number; pronounceability: number; distinctiveness: number; international_fit: number; total: number }>,
+  domResults: Array<{ name: string; tld: string; status: string }>,
+  tmResults: Array<{ name: string; risk: string }>,
+): PoolEntry[] {
+  return candidates.map(c => {
+    const sc = scores.find(s => s.candidate_id === c.id)
+    const dom: Record<string, DomStatus> = Object.fromEntries(TLD_ORDER.map(t => [t, "taken" as DomStatus]))
+    for (const d of domResults.filter(r => r.name === c.name)) {
+      if (d.status === "available" || d.status === "taken" || d.status === "premium") {
+        dom[d.tld] = d.status as DomStatus
+      }
+    }
+    const risk = tmResults.find(t => t.name === c.name)?.risk
+    const tm: TmRisk = risk === "clear" || risk === "caution" || risk === "conflict" ? risk : "caution"
+    return {
+      name: c.name,
+      tagline: c.rationale?.slice(0, 80) ?? "",
+      score: sc?.total ?? 75,
+      tm,
+      chips: ["AI Suggested"],
+      bars: {
+        Brandability: sc?.brandability ?? 75,
+        Memorability: sc?.memorability ?? 75,
+        Distinctiveness: sc?.distinctiveness ?? 75,
+        Pronunciation: sc?.pronounceability ?? 75,
+        "International fit": sc?.international_fit ?? 75,
+      },
+      dom,
+    }
+  })
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function HomePage() {
+  const { user, session, signOut } = useAuth()
+
   const [brief, setBrief]       = useState("")
   const [industry, setIndustry] = useState("Tech")
   const [count, setCount]       = useState(10)
@@ -301,28 +339,88 @@ export default function HomePage() {
   const [filter, setFilter]     = useState<Filter>("all")
   const [expanded, setExpanded] = useState<Record<number, boolean>>({})
   const [buyOpen, setBuyOpen]   = useState<string | null>(null)
+  const [livePool, setLivePool] = useState<PoolEntry[] | null>(null)
 
   const resultsRef = useRef<HTMLElement>(null)
   const timers     = useRef<ReturnType<typeof setTimeout>[]>([])
 
   const clearTimers = () => { timers.current.forEach(clearTimeout); timers.current = [] }
 
-  const handleGenerate = useCallback(() => {
+  const handleGenerate = useCallback(async () => {
     clearTimers()
     setPhase("skeleton")
     setFilter("all")
     setExpanded({})
     setBuyOpen(null)
+    setLivePool(null)
     requestAnimationFrame(() => {
       if (resultsRef.current) {
         const y = resultsRef.current.getBoundingClientRect().top + window.scrollY - 70
         window.scrollTo({ top: y, behavior: "smooth" })
       }
     })
-    timers.current.push(setTimeout(() => setPhase("names"),    1500))
-    timers.current.push(setTimeout(() => setPhase("tm"),       2900))
-    timers.current.push(setTimeout(() => setPhase("done"),     4100))
-  }, [])
+
+    const token = session?.access_token
+    if (!token) {
+      timers.current.push(setTimeout(() => setPhase("names"), 1500))
+      timers.current.push(setTimeout(() => setPhase("tm"),    2900))
+      timers.current.push(setTimeout(() => setPhase("done"),  4100))
+      return
+    }
+
+    try {
+      const h = { "Content-Type": "application/json", Authorization: `Bearer ${token}` }
+
+      const projRes = await fetch("/api/projects", {
+        method: "POST", headers: h,
+        body: JSON.stringify({
+          name: brief.slice(0, 50) || "My Brand",
+          brief: { industry, keywords: [industry.toLowerCase()], targetAudience: "Entrepreneurs and startups", tone: "Professional and innovative", languages: ["fr", "en"] },
+          disclaimer_accepted: true,
+        }),
+      })
+      if (!projRes.ok) throw new Error("create project failed")
+      const { data: proj } = await projRes.json()
+
+      const genRes = await fetch(`/api/projects/${proj.id}/generate`, {
+        method: "POST", headers: h,
+        body: JSON.stringify({ count }),
+      })
+      if (!genRes.ok) throw new Error("generate failed")
+      const { data: genData } = await genRes.json()
+      const candidates: Array<{ id: string; name: string; rationale: string }> = genData.candidates ?? []
+      const cNames = candidates.map(c => c.name)
+
+      setLivePool(candidates.slice(0, count).map(c => ({
+        name: c.name, tagline: c.rationale?.slice(0, 80) ?? "", score: 75,
+        tm: "caution" as TmRisk, chips: ["AI Suggested"],
+        bars: { Brandability: 75, Memorability: 75, Distinctiveness: 75, Pronunciation: 75, "International fit": 75 },
+        dom: Object.fromEntries(TLD_ORDER.map(t => [t, "taken" as DomStatus])),
+      })))
+      setPhase("names")
+
+      const [domRes, tmRes] = await Promise.all([
+        fetch(`/api/projects/${proj.id}/domains`, { method: "POST", headers: h, body: JSON.stringify({ names: cNames, tlds: TLD_ORDER }) }),
+        fetch(`/api/projects/${proj.id}/trademarks`, { method: "POST", headers: h, body: JSON.stringify({ names: cNames }) }),
+      ])
+      setPhase("tm")
+
+      const [domJson, tmJson] = await Promise.all([
+        domRes.ok ? domRes.json() : { data: [] },
+        tmRes.ok ? tmRes.json() : { data: [] },
+      ])
+
+      const detailRes = await fetch(`/api/projects/${proj.id}`, { headers: h })
+      const { data: detail } = detailRes.ok ? await detailRes.json() : { data: null }
+
+      setLivePool(mergeApiData(candidates, detail?.scores ?? [], domJson.data ?? [], tmJson.data ?? []))
+      setPhase("done")
+    } catch (err) {
+      console.error("Generate error:", err)
+      setLivePool(null)
+      setPhase("done")
+    }
+  }, [session, brief, industry, count])
 
   useEffect(() => () => clearTimers(), [])
 
@@ -334,7 +432,8 @@ export default function HomePage() {
   const showFilters = phase === "done"
   const prog        = PROGRESS[phase]
 
-  const visiblePool = POOL.slice(0, Math.min(count, POOL.length))
+  const displayPool = livePool ?? POOL
+  const visiblePool = displayPool.slice(0, Math.min(count, displayPool.length))
 
   const filteredCards = showFilters ? visiblePool.filter(p => {
     if (filter === "available") return p.dom[".com"] === "available"
@@ -358,8 +457,17 @@ export default function HomePage() {
         <div style={{ display: "flex", alignItems: "center", gap: "clamp(8px,2vw,26px)", flexWrap: "wrap", justifyContent: "flex-end" }}>
           <a href="#how"      style={{ color: "#A9AFC3", textDecoration: "none", fontSize: 14, fontWeight: 600 }}>How it works</a>
           <a href="#examples" style={{ color: "#A9AFC3", textDecoration: "none", fontSize: 14, fontWeight: 600 }}>Examples</a>
-          <a href="/login"    style={{ color: "#C9CCDA", textDecoration: "none", fontSize: 14, fontWeight: 600 }}>Log in</a>
-          <a href="/signup"   style={{ display: "inline-flex", alignItems: "center", height: 40, padding: "0 18px", borderRadius: 10, background: "#6367FF", color: "#fff", textDecoration: "none", fontSize: 14, fontWeight: 700, boxShadow: "0 6px 22px rgba(99,103,255,.45)" }}>Sign up free</a>
+          {user ? (
+            <>
+              <span style={{ fontSize: 13.5, color: "#8a90a4", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</span>
+              <button onClick={() => signOut()} style={{ height: 36, padding: "0 16px", borderRadius: 9, background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.12)", color: "#C9CCDA", fontFamily: "inherit", fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}>Sign out</button>
+            </>
+          ) : (
+            <>
+              <a href="/login"  style={{ color: "#C9CCDA", textDecoration: "none", fontSize: 14, fontWeight: 600 }}>Log in</a>
+              <a href="/signup" style={{ display: "inline-flex", alignItems: "center", height: 40, padding: "0 18px", borderRadius: 10, background: "#6367FF", color: "#fff", textDecoration: "none", fontSize: 14, fontWeight: 700, boxShadow: "0 6px 22px rgba(99,103,255,.45)" }}>Sign up free</a>
+            </>
+          )}
         </div>
       </nav>
 
@@ -427,7 +535,8 @@ export default function HomePage() {
                 {generating && <Spinner size={16} />}
                 <span>{generating ? "Generating…" : "Generate my names →"}</span>
               </button>
-              <div style={{ marginTop: 11, fontSize: 12, color: "#6b7287", textAlign: "center" }}>No signup needed — your first batch is on us.</div>
+              {!user && <div style={{ marginTop: 11, fontSize: 12, color: "#6b7287", textAlign: "center" }}>No signup needed — your first batch is on us.</div>}
+              {user && <div style={{ marginTop: 11, fontSize: 12, color: "#6b7287", textAlign: "center" }}>Generates real names with trademark & domain checks.</div>}
             </div>
           </div>
         </div>
@@ -509,7 +618,7 @@ export default function HomePage() {
         {/* skeleton cards */}
         {showSkeleton && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(330px,1fr))", gap: 20, marginTop: 30 }}>
-            {Array.from({ length: Math.min(count, POOL.length) }).map((_, i) => <SkeletonCard key={i} />)}
+            {Array.from({ length: count }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
         )}
 
