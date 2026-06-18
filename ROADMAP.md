@@ -1,6 +1,6 @@
 # AINameGenius — Roadmap
 
-_Dernière mise à jour : 18 juin 2026 — Sprint 1 backend ✅ complet — auto-mis à jour à chaque commit_
+_Dernière mise à jour : 19 juin 2026 — Sprint 1 ✅ complet (backend + frontend) — auto-mis à jour à chaque commit_
 
 ## Statut de déploiement
 
@@ -11,25 +11,26 @@ _Dernière mise à jour : 18 juin 2026 — Sprint 1 backend ✅ complet — auto
 | Auth JWT | ✅ Fonctionnel |
 | GitHub CI/CD | ✅ Auto-deploy |
 | OpenRouter LLM | ✅ Connecté |
+| INPI Marques | ✅ Déployé |
+| Frontend Landing Page | ✅ Déployé |
 
 ---
 
-## Sprint 1 — Rendre le site fonctionnel (semaine 1-2)
+## Sprint 1 — Fonctionnel ✅ TERMINÉ
 
 ### Liens affiliés _(business model principal)_
 - [x] **Namecheap** — `buildAffiliateLinks()` avec `AFFILIATE_NAMECHEAP_ID`
 - [x] **GoDaddy** — paramètre `isc` + `AFFILIATE_GODADDY_ID`
 - [x] **Hostinger** — paramètre `ref` + `AFFILIATE_HOSTINGER_ID`
-- [ ] S'inscrire aux 3 programmes d'affiliation
+- [ ] S'inscrire aux 3 programmes d'affiliation et ajouter les IDs dans Vercel
   - Namecheap : https://www.namecheap.com/affiliates/
   - GoDaddy : https://www.godaddy.com/affiliate-programs
   - Hostinger : https://www.hostinger.fr/affilies
-- [ ] Ajouter `AFFILIATE_GODADDY_ID` et `AFFILIATE_HOSTINGER_ID` dans Vercel env vars
 
 ### Disponibilité des domaines
 - [x] RDAP `.com` et `.fr`
 - [x] RDAP étendu à `.net`, `.org`, `.io`, `.co`, `.ai`, `.eu` (8 TLDs au total)
-- [x] `DomainCheckSchema` mis à jour pour accepter les 8 TLDs
+- [x] `DomainCheckSchema` mis à jour pour les 8 TLDs
 
 ### Marques (INPI)
 - [x] Compte INPI créé — ROLE_API_MARQUES accordé
@@ -38,24 +39,34 @@ _Dernière mise à jour : 18 juin 2026 — Sprint 1 backend ✅ complet — auto
 - [x] `lib/trademark/inpi.ts` réécrit — session-based auth, parsing XML (`fast-xml-parser`), niveaux de risque (clear / caution / conflict / incomplete)
 - [x] `lib/trademark/check.ts` — orchestrateur
 - [x] Route `/trademarks` connectée — persiste dans `trademark_results`
-- [x] Migration `0003_trademark_unique.sql` — contrainte unique pour upsert
+- [x] Migration `0003_trademark_unique.sql` appliquée dans Supabase
 - [x] `fast-xml-parser` ajouté dans `package.json`
-- [x] Ajouter `INPI_USERNAME` et `INPI_PASSWORD` dans Vercel env vars
-- [x] Appliquer la migration `0003` dans Supabase SQL Editor
+- [x] `INPI_USERNAME` et `INPI_PASSWORD` configurés dans Vercel
 
-### Frontend
-- [ ] Page d'accueil + formulaire brief
-- [ ] Page de résultats : noms + domaines + boutons "Acheter"
-- [ ] Corriger URL redirect Supabase Auth (actuellement `localhost:3000` → URL Vercel)
+### Frontend — Landing Page
+- [x] Page d'accueil déployée depuis Claude Design handoff (`app/page.tsx`)
+- [x] Plus Jakarta Sans via `next/font/google`
+- [x] Hero centré avec formulaire brief (textarea + industry select + count slider)
+- [x] Génération animée : skeleton → names → trademark → domain → done
+- [x] Cartes nom : score /100, statut marque INPI, grille 8 TLDs, menu "Acheter"
+- [x] Boutons d'achat Namecheap / GoDaddy / Hostinger (liens affiliés intégrés)
+- [x] Détail des scores (expandable)
+- [x] Filtres : Tous / .com disponible / Faible risque
+- [x] Section "Comment ça marche" + badges flottants animés
+- [ ] Corriger URL redirect Supabase Auth (`localhost:3000` → URL Vercel)
+- [ ] Connecter le formulaire à la vraie API (nécessite pages auth)
 
 ---
 
 ## Sprint 2 — Produit complet (semaine 3-4)
 
+- [ ] Pages auth (`/login`, `/signup`) avec Supabase Auth UI
+- [ ] Connexion du formulaire landing → vraie API generate
+- [ ] Page projet `/projects/[id]` — résultats réels depuis Supabase
 - [ ] Génération de logos (Stability AI ou Replicate)
 - [ ] Brand kit (couleurs, polices, tagline)
 - [ ] Rapport PDF téléchargeable
-- [ ] Page profil utilisateur
+- [ ] Page profil utilisateur / historique des projets
 
 ---
 
@@ -70,7 +81,7 @@ _Dernière mise à jour : 18 juin 2026 — Sprint 1 backend ✅ complet — auto
 ## Sprint 4 — Croissance (semaine 7-8)
 
 - [ ] Pages résultats publiques (SEO)
-- [ ] Analytics (Vercel Analytics)
+- [ ] Vercel Analytics
 - [ ] Tracking clics affiliés (table `events`)
 - [ ] Blog / contenu SEO
 
@@ -84,47 +95,16 @@ _Dernière mise à jour : 18 juin 2026 — Sprint 1 backend ✅ complet — auto
 | `NEXT_PUBLIC_SUPABASE_URL` | ✅ Configuré | supabase.com |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✅ Configuré | supabase.com |
 | `SUPABASE_SERVICE_ROLE_KEY` | ✅ Configuré | supabase.com |
-| `INPI_USERNAME` | ❌ À ajouter | api-gateway.inpi.fr (ton email INPI) |
-| `INPI_PASSWORD` | ❌ À ajouter | api-gateway.inpi.fr (ton mot de passe INPI) |
-| `AFFILIATE_NAMECHEAP_ID` | ❌ À ajouter | namecheap.com/affiliates |
-| `AFFILIATE_GODADDY_ID` | ❌ À ajouter | godaddy.com/affiliate-programs |
-| `AFFILIATE_HOSTINGER_ID` | ❌ À ajouter | hostinger.fr/affilies |
-| `STABILITY_API_KEY` | ❌ Sprint 2 | platform.stability.ai |
-| `STRIPE_SECRET_KEY` | ❌ Sprint 3 | dashboard.stripe.com |
-| `STRIPE_WEBHOOK_SECRET` | ❌ Sprint 3 | dashboard.stripe.com |
+| `INPI_USERNAME` | ✅ Configuré | api-gateway.inpi.fr |
+| `INPI_PASSWORD` | ✅ Configuré | api-gateway.inpi.fr |
+| `AFFILIATE_NAMECHEAP_ID` | ⬜ En attente | namecheap.com/affiliates |
+| `AFFILIATE_GODADDY_ID` | ⬜ En attente | godaddy.com/affiliate-programs |
+| `AFFILIATE_HOSTINGER_ID` | ⬜ En attente | hostinger.fr/affilies |
+| `STABILITY_API_KEY` | ⬜ Sprint 2 | platform.stability.ai |
+| `STRIPE_SECRET_KEY` | ⬜ Sprint 3 | dashboard.stripe.com |
+| `STRIPE_WEBHOOK_SECRET` | ⬜ Sprint 3 | dashboard.stripe.com |
 
 ---
-
-## Format de la réponse API `/domains`
-
-```json
-[
-  {
-    "name": "Lumevo",
-    "tld": ".com",
-    "status": "available",
-    "buyLinks": {
-      "namecheap": "https://www.namecheap.com/domains/registration/results/?domain=Lumevo.com",
-      "godaddy": "https://www.godaddy.com/domainsearch/find?domainToCheck=Lumevo.com",
-      "hostinger": "https://www.hostinger.fr/domaines?domain=Lumevo.com"
-    }
-  }
-]
-```
-
-## Format de la réponse API `/trademarks`
-
-```json
-[
-  {
-    "name": "Lumevo",
-    "risk": "clear",
-    "total": 0,
-    "hits": [],
-    "source": "inpi"
-  }
-]
-```
 
 ## Architecture INPI (api-gateway.inpi.fr)
 
@@ -134,3 +114,22 @@ _Dernière mise à jour : 18 juin 2026 — Sprint 1 backend ✅ complet — auto
 - **Format réponse** : XML (`application/xml`)
 - **Syntaxe requête** : `{ "query": "[Mark=NOM]", "collections": ["FR", "EU"], ... }`
 - **Champs retournés** : `Mark`, `MarkCurrentStatusCode`, `ApplicationNumber`, `ukey`
+
+## Format de la réponse API `/domains`
+
+```json
+[{
+  "name": "Lumevo", "tld": ".com", "status": "available",
+  "buyLinks": {
+    "namecheap": "https://www.namecheap.com/domains/registration/results/?domain=Lumevo.com",
+    "godaddy": "https://www.godaddy.com/domainsearch/find?domainToCheck=Lumevo.com",
+    "hostinger": "https://www.hostinger.fr/domaines?domain=Lumevo.com"
+  }
+}]
+```
+
+## Format de la réponse API `/trademarks`
+
+```json
+[{ "name": "Lumevo", "risk": "clear", "total": 0, "hits": [], "source": "inpi" }]
+```
