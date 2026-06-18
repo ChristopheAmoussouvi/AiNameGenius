@@ -1,0 +1,567 @@
+"use client"
+
+import { useState, useRef, useEffect, useCallback, type CSSProperties } from "react"
+import Image from "next/image"
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type Phase = "done" | "skeleton" | "names" | "tm"
+type Filter = "all" | "available" | "lowrisk"
+type TmRisk = "clear" | "caution" | "conflict"
+type DomStatus = "available" | "taken" | "premium"
+
+interface PoolEntry {
+  name: string
+  tagline: string
+  score: number
+  tm: TmRisk
+  chips: string[]
+  bars: Record<string, number>
+  dom: Record<string, DomStatus>
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const TLD_ORDER = [".com", ".net", ".org", ".io", ".co", ".ai", ".fr", ".eu"]
+
+const POOL: PoolEntry[] = [
+  {
+    name: "Lumevo", tagline: "Bright ideas. Smarter growth.", score: 91, tm: "clear",
+    chips: ["AI Suggested", "Brandable", "Short"],
+    bars: { Brandability: 94, Memorability: 88, Distinctiveness: 90, Pronunciation: 92, "International fit": 89 },
+    dom: { ".com": "available", ".net": "available", ".org": "taken", ".io": "available", ".co": "available", ".ai": "premium", ".fr": "available", ".eu": "available" },
+  },
+  {
+    name: "Zephyra", tagline: "Calm power for ambitious teams.", score: 88, tm: "clear",
+    chips: ["AI Suggested", "Brandable"],
+    bars: { Brandability: 90, Memorability: 85, Distinctiveness: 92, Pronunciation: 80, "International fit": 91 },
+    dom: { ".com": "taken", ".net": "available", ".org": "available", ".io": "available", ".co": "taken", ".ai": "available", ".fr": "available", ".eu": "available" },
+  },
+  {
+    name: "Fluxio", tagline: "Momentum, built in.", score: 82, tm: "clear",
+    chips: ["Brandable", "Short", "Tech"],
+    bars: { Brandability: 85, Memorability: 84, Distinctiveness: 78, Pronunciation: 88, "International fit": 80 },
+    dom: { ".com": "available", ".net": "taken", ".org": "taken", ".io": "available", ".co": "available", ".ai": "available", ".fr": "taken", ".eu": "available" },
+  },
+  {
+    name: "Novaq", tagline: "A new spark for your category.", score: 84, tm: "caution",
+    chips: ["AI Suggested", "Short"],
+    bars: { Brandability: 82, Memorability: 90, Distinctiveness: 75, Pronunciation: 86, "International fit": 83 },
+    dom: { ".com": "available", ".net": "available", ".org": "available", ".io": "available", ".co": "premium", ".ai": "available", ".fr": "taken", ".eu": "available" },
+  },
+  {
+    name: "Quanto", tagline: "Measured. Trusted. Bold.", score: 76, tm: "clear",
+    chips: ["Brandable"],
+    bars: { Brandability: 78, Memorability: 74, Distinctiveness: 70, Pronunciation: 82, "International fit": 75 },
+    dom: { ".com": "taken", ".net": "available", ".org": "available", ".io": "taken", ".co": "taken", ".ai": "premium", ".fr": "available", ".eu": "available" },
+  },
+  {
+    name: "Verdano", tagline: "Grounded growth, naturally.", score: 67, tm: "caution",
+    chips: ["Brandable", "Short"],
+    bars: { Brandability: 70, Memorability: 66, Distinctiveness: 62, Pronunciation: 72, "International fit": 64 },
+    dom: { ".com": "taken", ".net": "taken", ".org": "available", ".io": "available", ".co": "available", ".ai": "taken", ".fr": "available", ".eu": "taken" },
+  },
+]
+
+const INDUSTRIES = ["Tech", "E-commerce", "Health", "Finance", "Education", "Food & Drink", "Travel", "Creative", "Other"]
+
+const CHIP_STYLE: Record<string, { color: string; bg: string }> = {
+  "AI Suggested": { color: "#8494FF", bg: "rgba(132,148,255,.14)" },
+  "Brandable":    { color: "#C9BEFF", bg: "rgba(201,190,255,.13)" },
+  "Short":        { color: "#FFDBFD", bg: "rgba(255,219,253,.11)" },
+  "Tech":         { color: "#8494FF", bg: "rgba(132,148,255,.10)" },
+}
+
+const TM_INFO: Record<TmRisk, { label: string; color: string; icon: string; bg: string; border: string; meta: string }> = {
+  clear:    { label: "Trademark clear",      color: "#6FCF97", icon: "✓", bg: "rgba(111,207,151,.10)", border: "rgba(111,207,151,.28)", meta: "0 exact matches" },
+  caution:  { label: "Review similar marks", color: "#FFCF95", icon: "⚠", bg: "rgba(255,207,149,.10)", border: "rgba(255,207,149,.28)", meta: "similar marks found" },
+  conflict: { label: "Potential conflict",   color: "#F48F68", icon: "✕", bg: "rgba(244,143,104,.10)", border: "rgba(244,143,104,.28)", meta: "exact match" },
+}
+
+const PROGRESS: Record<Phase, { pct: string; label: string }> = {
+  skeleton: { pct: "28%",  label: "Generating name candidates…" },
+  names:    { pct: "60%",  label: "Running trademark pre-checks…" },
+  tm:       { pct: "86%",  label: "Checking domain availability…" },
+  done:     { pct: "100%", label: "Done" },
+}
+
+const STEPS = [
+  { n: "1", icon: "✏️", iconBg: "rgba(132,148,255,.15)", title: "Describe your brief",    body: "Tell us your idea, industry and tone. A sentence or two is enough for the model to work with." },
+  { n: "2", icon: "⚡", iconBg: "rgba(99,103,255,.18)",  title: "Generate & verify",      body: "We craft brandable names, score them, run INPI trademark pre-checks and check 8 domain extensions — in parallel." },
+  { n: "3", icon: "🚀", iconBg: "rgba(201,190,255,.16)", title: "Register in one click",  body: "Found the one? Grab the domain instantly through Namecheap, GoDaddy or Hostinger." },
+]
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function scoreColor(s: number) {
+  return s >= 70 ? "#6FCF97" : s >= 50 ? "#FFCF95" : "#F48F68"
+}
+
+function scoreBg(s: number) {
+  const rgb = s >= 70 ? "111,207,151" : s >= 50 ? "255,207,149" : "244,143,104"
+  return { bg: `rgba(${rgb},.12)`, border: `rgba(${rgb},.3)` }
+}
+
+function buyLinks(name: string, tld: string) {
+  const slug = (name + tld).toLowerCase()
+  return [
+    { name: "Namecheap", url: `https://www.namecheap.com/domains/registration/results/?domain=${slug}` },
+    { name: "GoDaddy",   url: `https://www.godaddy.com/domainsearch/find?domainToCheck=${slug}` },
+    { name: "Hostinger", url: `https://www.hostinger.com/domain-name-search?domain=${slug}` },
+  ]
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function Spinner({ size = 16 }: { size?: number }) {
+  return (
+    <span className="spin" style={{
+      display: "inline-block", width: size, height: size,
+      border: `2px solid rgba(132,148,255,.3)`, borderTopColor: "#8494FF", borderRadius: "50%",
+    }} />
+  )
+}
+
+function SkeletonCard() {
+  return (
+    <div style={{ padding: 24, borderRadius: 18, background: "rgba(21,24,39,.6)", border: "1px solid rgba(255,255,255,.06)" }}>
+      <div className="shimmer" style={{ height: 30, width: "55%", borderRadius: 8, background: "linear-gradient(90deg,#1c2030,#272c40,#1c2030)" }} />
+      <div className="shimmer" style={{ height: 14, width: "80%", marginTop: 14, borderRadius: 6, background: "linear-gradient(90deg,#1c2030,#272c40,#1c2030)" }} />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginTop: 20 }}>
+        {[0,1,2,3].map(i => <div key={i} style={{ height: 34, borderRadius: 8, background: "#171b28" }} />)}
+      </div>
+      <div className="shimmer" style={{ height: 40, width: "100%", marginTop: 18, borderRadius: 10, background: "linear-gradient(90deg,#1c2030,#272c40,#1c2030)" }} />
+    </div>
+  )
+}
+
+function TldButton({
+  cardIdx, tld, status, domLoading, buyOpen, onToggleBuy,
+}: {
+  cardIdx: number; tld: string; status: DomStatus; domLoading: boolean
+  buyOpen: string | null; onToggleBuy: (key: string | null) => void
+}) {
+  const key = `${cardIdx}${tld}`
+  const resolved = !domLoading
+  const clickable = resolved && (status === "available" || status === "premium")
+  const menuOpen = buyOpen === key
+  const statusColor = status === "available" ? "#6FCF97" : status === "premium" ? "#FFCF95" : "#F48F68"
+  const statusLabel = status === "available" ? "Free" : status === "premium" ? "Prem" : "Taken"
+  const name = POOL[cardIdx]?.name ?? ""
+
+  const baseBtn: CSSProperties = {
+    width: "100%", display: "flex", flexDirection: "column", alignItems: "center",
+    gap: 2, padding: "8px 4px", borderRadius: 9, fontFamily: "inherit",
+    background: "transparent", cursor: "default",
+  }
+  const btnStyle: CSSProperties = resolved
+    ? clickable
+      ? { ...baseBtn, background: status === "premium" ? "rgba(255,207,149,.07)" : "rgba(111,207,151,.07)", border: `1px solid ${status === "premium" ? "rgba(255,207,149,.35)" : "rgba(111,207,151,.32)"}`, cursor: "pointer" }
+      : { ...baseBtn, background: "rgba(244,143,104,.05)", border: "1px solid rgba(244,143,104,.18)", opacity: 0.7 }
+    : { ...baseBtn, background: "#161a27", border: "1px solid rgba(255,255,255,.05)" }
+
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!menuOpen) return
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onToggleBuy(null)
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [menuOpen, onToggleBuy])
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button onClick={clickable ? () => onToggleBuy(menuOpen ? null : key) : undefined} style={btnStyle}>
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: "#C9CCDA" }}>{tld}</span>
+        {!resolved
+          ? <span style={{ fontSize: 10, color: "#5b6275" }}>···</span>
+          : <span style={{ fontSize: 10, fontWeight: 700, color: statusColor }}>{statusLabel}</span>
+        }
+      </button>
+      {menuOpen && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)",
+          zIndex: 20, width: 158, padding: 8, borderRadius: 13,
+          background: "#1F2433", border: "1px solid rgba(255,255,255,.12)", boxShadow: "0 18px 40px rgba(0,0,0,.55)",
+        }}>
+          <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".08em", color: "#737a8f", padding: "2px 6px 8px" }}>
+            BUY {(name + tld).toLowerCase()} ON
+          </div>
+          {buyLinks(name, tld).map(b => (
+            <a key={b.name} href={b.url} target="_blank" rel="noopener noreferrer" style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "9px 10px", borderRadius: 9, textDecoration: "none", color: "#F2F1FF",
+              fontSize: 13, fontWeight: 600,
+            }}
+              onMouseEnter={e => (e.currentTarget.style.background = "rgba(99,103,255,.18)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+            >
+              <span>{b.name}</span><span style={{ color: "#8494FF" }}>→</span>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function NameCard({
+  entry, cardIdx, domLoading, tmLoading, expanded, buyOpen,
+  onToggleExpand, onToggleBuy,
+}: {
+  entry: PoolEntry; cardIdx: number; domLoading: boolean; tmLoading: boolean
+  expanded: boolean; buyOpen: string | null
+  onToggleExpand: () => void; onToggleBuy: (key: string | null) => void
+}) {
+  const sc = scoreColor(entry.score)
+  const { bg: sBg, border: sBorder } = scoreBg(entry.score)
+  const tm = TM_INFO[entry.tm]
+
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", padding: 22, borderRadius: 18,
+      background: "linear-gradient(165deg,rgba(31,36,51,.7),rgba(21,24,39,.85))",
+      border: "1px solid rgba(255,255,255,.08)", boxShadow: "0 16px 40px rgba(0,0,0,.35)",
+    }}>
+      {/* header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-.02em", color: "#fff" }}>{entry.name}</div>
+          <div style={{ fontSize: 13, color: "#9aa0b4", marginTop: 3 }}>{entry.tagline}</div>
+        </div>
+        <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 50, height: 50, borderRadius: 13, background: sBg, border: `1px solid ${sBorder}` }}>
+            <span style={{ fontSize: 20, fontWeight: 800, color: sc }}>{entry.score}</span>
+          </div>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".04em", color: sc }}>/ 100</span>
+        </div>
+      </div>
+
+      {/* chips */}
+      <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 14 }}>
+        {entry.chips.map(c => {
+          const cs = CHIP_STYLE[c] ?? CHIP_STYLE["Brandable"]
+          return <span key={c} style={{ fontSize: 11.5, fontWeight: 700, padding: "4px 10px", borderRadius: 100, color: cs.color, background: cs.bg }}>{c}</span>
+        })}
+      </div>
+
+      {/* trademark row */}
+      <div style={{ display: "flex", alignItems: "center", gap: 9, marginTop: 16, padding: "11px 13px", borderRadius: 11, background: tmLoading ? "rgba(255,255,255,.03)" : tm.bg, border: `1px solid ${tmLoading ? "rgba(255,255,255,.07)" : tm.border}` }}>
+        {tmLoading
+          ? <><Spinner /><span style={{ fontSize: 13, fontWeight: 600, color: "#8a90a4" }}>Checking trademark…</span></>
+          : <><span style={{ fontSize: 14 }}>{tm.icon}</span><span style={{ fontSize: 13, fontWeight: 700, color: tm.color }}>{tm.label}</span><span style={{ fontSize: 12, color: "#737a8f", marginLeft: "auto" }}>{tm.meta}</span></>
+        }
+      </div>
+
+      {/* TLD grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(62px,1fr))", gap: 7, marginTop: 14 }}>
+        {TLD_ORDER.map(tld => (
+          <TldButton key={tld} cardIdx={cardIdx} tld={tld} status={entry.dom[tld] ?? "taken"} domLoading={domLoading} buyOpen={buyOpen} onToggleBuy={onToggleBuy} />
+        ))}
+      </div>
+
+      {/* expanded score bars */}
+      {expanded && (
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.07)", display: "flex", flexDirection: "column", gap: 11 }}>
+          {Object.entries(entry.bars).map(([label, val]) => (
+            <div key={label}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                <span style={{ fontSize: 12, color: "#9aa0b4", fontWeight: 500 }}>{label}</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#C9CCDA" }}>{val}</span>
+              </div>
+              <div style={{ height: 5, borderRadius: 100, background: "rgba(255,255,255,.07)", overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${val}%`, borderRadius: 100, background: scoreColor(val) }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* actions */}
+      <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+        <button onClick={onToggleExpand} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, height: 42, padding: "0 14px", borderRadius: 11, background: "transparent", border: "1px solid rgba(132,148,255,.4)", color: "#8494FF", fontFamily: "inherit", fontSize: 13.5, fontWeight: 700, cursor: "pointer" }}>
+          {expanded ? "Hide" : "Scores"}
+        </button>
+        <a href="#" style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, height: 42, borderRadius: 11, background: "#6367FF", color: "#fff", textDecoration: "none", fontSize: 13.5, fontWeight: 700, boxShadow: "0 8px 22px rgba(99,103,255,.4)" }}>
+          Register domain →
+        </a>
+      </div>
+    </div>
+  )
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+export default function HomePage() {
+  const [brief, setBrief]       = useState("")
+  const [industry, setIndustry] = useState("Tech")
+  const [count, setCount]       = useState(10)
+  const [phase, setPhase]       = useState<Phase>("done")
+  const [filter, setFilter]     = useState<Filter>("all")
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({})
+  const [buyOpen, setBuyOpen]   = useState<string | null>(null)
+
+  const resultsRef = useRef<HTMLElement>(null)
+  const timers     = useRef<ReturnType<typeof setTimeout>[]>([])
+
+  const clearTimers = () => { timers.current.forEach(clearTimeout); timers.current = [] }
+
+  const handleGenerate = useCallback(() => {
+    clearTimers()
+    setPhase("skeleton")
+    setFilter("all")
+    setExpanded({})
+    setBuyOpen(null)
+    requestAnimationFrame(() => {
+      if (resultsRef.current) {
+        const y = resultsRef.current.getBoundingClientRect().top + window.scrollY - 70
+        window.scrollTo({ top: y, behavior: "smooth" })
+      }
+    })
+    timers.current.push(setTimeout(() => setPhase("names"),    1500))
+    timers.current.push(setTimeout(() => setPhase("tm"),       2900))
+    timers.current.push(setTimeout(() => setPhase("done"),     4100))
+  }, [])
+
+  useEffect(() => () => clearTimers(), [])
+
+  const generating  = phase !== "done"
+  const domLoading  = phase !== "done"
+  const tmLoading   = phase === "skeleton" || phase === "names"
+  const showSkeleton = phase === "skeleton"
+  const showCards   = !showSkeleton
+  const showFilters = phase === "done"
+  const prog        = PROGRESS[phase]
+
+  const visiblePool = POOL.slice(0, Math.min(count, POOL.length))
+
+  const filteredCards = showFilters ? visiblePool.filter(p => {
+    if (filter === "available") return p.dom[".com"] === "available"
+    if (filter === "lowrisk")  return p.score >= 70 && p.tm === "clear"
+    return true
+  }) : visiblePool
+
+  const toggleBuy = useCallback((key: string | null) => setBuyOpen(k => k === key ? null : key), [])
+
+  return (
+    <div style={{ position: "relative", overflowX: "hidden", minHeight: "100vh", background: "#0B0E19", color: "#F2F1FF" }}>
+
+      {/* ── NAV ── */}
+      <nav style={{ position: "sticky", top: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "16px clamp(20px,5vw,64px)", background: "rgba(11,14,25,.72)", backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", borderBottom: "1px solid rgba(255,255,255,.06)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+          <Image src="/mascot.png" alt="AINameGenius logo" width={38} height={38} style={{ objectFit: "contain" }} />
+          <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: "-.02em" }}>
+            <span style={{ color: "#8494FF" }}>AI</span><span style={{ color: "#FFFFFF" }}>Name</span><span style={{ color: "#6367FF" }}>Genius</span>
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "clamp(8px,2vw,26px)", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <a href="#how"      style={{ color: "#A9AFC3", textDecoration: "none", fontSize: 14, fontWeight: 600 }}>How it works</a>
+          <a href="#examples" style={{ color: "#A9AFC3", textDecoration: "none", fontSize: 14, fontWeight: 600 }}>Examples</a>
+          <a href="/login"    style={{ color: "#C9CCDA", textDecoration: "none", fontSize: 14, fontWeight: 600 }}>Log in</a>
+          <a href="/signup"   style={{ display: "inline-flex", alignItems: "center", height: 40, padding: "0 18px", borderRadius: 10, background: "#6367FF", color: "#fff", textDecoration: "none", fontSize: 14, fontWeight: 700, boxShadow: "0 6px 22px rgba(99,103,255,.45)" }}>Sign up free</a>
+        </div>
+      </nav>
+
+      {/* ── HERO ── */}
+      <section style={{ position: "relative" }}>
+        {/* background blobs */}
+        <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none", zIndex: 0 }}>
+          <div style={{ position: "absolute", top: -120, left: "8%", width: 460, height: 460, borderRadius: "50%", background: "#6367FF", filter: "blur(120px)", opacity: .32 }} />
+          <div style={{ position: "absolute", top: 120, right: -80, width: 420, height: 420, borderRadius: "50%", background: "#8494FF", filter: "blur(130px)", opacity: .22 }} />
+          <div style={{ position: "absolute", bottom: -160, left: "40%", width: 380, height: 380, borderRadius: "50%", background: "#FFDBFD", filter: "blur(150px)", opacity: .12 }} />
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 38, maxWidth: 760, margin: "0 auto", padding: "clamp(44px,8vh,104px) 24px 60px", position: "relative", zIndex: 2 }}>
+          {/* text block */}
+          <div style={{ textAlign: "center", maxWidth: 720 }}>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 14px", borderRadius: 100, background: "rgba(132,148,255,.12)", border: "1px solid rgba(132,148,255,.28)", marginBottom: 22 }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#6FCF97", boxShadow: "0 0 10px #6FCF97" }} />
+              <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: ".14em", color: "#C9BEFF", whiteSpace: "nowrap" }}>SMART NAMES. VERIFIED POTENTIAL.</span>
+            </div>
+            <h1 style={{ margin: "0 0 18px", fontSize: "clamp(38px,5.4vw,64px)", lineHeight: 1.04, fontWeight: 800, letterSpacing: "-.03em", color: "#fff" }}>
+              Find the perfect name <br />for your{" "}
+              <span style={{ background: "linear-gradient(100deg,#8494FF,#6367FF 55%,#C9BEFF)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>brand</span>.
+            </h1>
+            <p style={{ margin: "0 0 26px auto", fontSize: "clamp(16px,1.6vw,19px)", lineHeight: 1.6, color: "#A9AFC3", maxWidth: 520 }}>
+              Describe your idea and get brandable names — each with domain availability, INPI trademark pre-checks, and one-click registration. In about ten seconds.
+            </p>
+            <div style={{ display: "flex", gap: 26, flexWrap: "wrap", justifyContent: "center" }}>
+              {[["10M+", "Names analyzed"], ["500K+", "Domains checked"], ["98%", "Love their name"]].map(([val, lbl], i, arr) => (
+                <>
+                  <div key={lbl}><div style={{ fontSize: 22, fontWeight: 800, color: "#fff" }}>{val}</div><div style={{ fontSize: 12.5, color: "#737a8f", fontWeight: 500 }}>{lbl}</div></div>
+                  {i < arr.length - 1 && <div key={`sep${i}`} style={{ width: 1, background: "rgba(255,255,255,.1)" }} />}
+                </>
+              ))}
+            </div>
+          </div>
+
+          {/* form card */}
+          <div style={{ width: "100%", maxWidth: 620 }}>
+            <div style={{ position: "relative", padding: 26, borderRadius: 22, background: "linear-gradient(165deg,rgba(31,36,51,.85),rgba(21,24,39,.92))", border: "1px solid rgba(255,255,255,.09)", backdropFilter: "blur(22px)", WebkitBackdropFilter: "blur(22px)", boxShadow: "0 24px 60px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06)" }}>
+              <div style={{ position: "absolute", top: -1, left: 24, right: 24, height: 1, background: "linear-gradient(90deg,transparent,#6367FF,transparent)", opacity: .7 }} />
+              <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "#C9CCDA", marginBottom: 9, textAlign: "left" }}>Describe your project</label>
+              <textarea
+                value={brief}
+                onChange={e => setBrief(e.target.value)}
+                placeholder="Ex: a mobile coaching app for busy, active women…"
+                rows={3}
+                style={{ width: "100%", resize: "none", padding: "14px 15px", borderRadius: 12, background: "#0F1320", border: "1px solid rgba(255,255,255,.1)", color: "#F2F1FF", fontFamily: "inherit", fontSize: 15, lineHeight: 1.5, outline: "none" }}
+              />
+              <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 16 }}>
+                <div style={{ flex: "1 1 150px", textAlign: "left" }}>
+                  <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: "#8a90a4", marginBottom: 7 }}>Industry</label>
+                  <select value={industry} onChange={e => setIndustry(e.target.value)} style={{ width: "100%", height: 44, padding: "0 12px", borderRadius: 11, background: "#0F1320", border: "1px solid rgba(255,255,255,.1)", color: "#F2F1FF", fontFamily: "inherit", fontSize: 14.5, fontWeight: 600, outline: "none", cursor: "pointer", appearance: "none" }}>
+                    {INDUSTRIES.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: "1 1 150px", textAlign: "left" }}>
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 7 }}>
+                    <label style={{ fontSize: 12.5, fontWeight: 600, color: "#8a90a4" }}>Suggestions</label>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: "#8494FF" }}>{count}</span>
+                  </div>
+                  <input type="range" min={5} max={20} step={1} value={count} onChange={e => setCount(+e.target.value)} style={{ width: "100%", height: 44, accentColor: "#6367FF", cursor: "pointer" }} />
+                </div>
+              </div>
+              <button onClick={handleGenerate} disabled={generating} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, width: "100%", height: 50, marginTop: 18, border: "none", borderRadius: 13, background: generating ? "#3a3e63" : "linear-gradient(95deg,#6367FF,#8494FF)", color: "#fff", fontFamily: "inherit", fontSize: 15.5, fontWeight: 800, cursor: generating ? "default" : "pointer", whiteSpace: "nowrap", boxShadow: "0 12px 30px rgba(99,103,255,.5)" }}>
+                {generating && <Spinner size={16} />}
+                <span>{generating ? "Generating…" : "Generate my names →"}</span>
+              </button>
+              <div style={{ marginTop: 11, fontSize: 12, color: "#6b7287", textAlign: "center" }}>No signup needed — your first batch is on us.</div>
+            </div>
+          </div>
+        </div>
+
+        {/* floating badges */}
+        <div className="float-a" style={{ position: "absolute", top: 140, right: "6%", zIndex: 1, display: "flex", alignItems: "center", gap: 8, padding: "9px 13px", borderRadius: 12, background: "rgba(21,24,39,.7)", border: "1px solid rgba(255,255,255,.1)", backdropFilter: "blur(10px)", boxShadow: "0 12px 30px rgba(0,0,0,.4)" }}>
+          <span style={{ width: 18, height: 18, borderRadius: "50%", background: "rgba(111,207,151,.18)", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#6FCF97", fontSize: 11 }}>✓</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>lumevo.com</span>
+          <span style={{ fontSize: 11, color: "#6FCF97", fontWeight: 600 }}>Free</span>
+        </div>
+        <div className="float-b" style={{ position: "absolute", bottom: 40, left: "5%", zIndex: 1, display: "flex", alignItems: "center", gap: 8, padding: "9px 13px", borderRadius: 12, background: "rgba(21,24,39,.7)", border: "1px solid rgba(255,255,255,.1)", backdropFilter: "blur(10px)", boxShadow: "0 12px 30px rgba(0,0,0,.4)" }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: "#8494FF" }}>91</span>
+          <span style={{ fontSize: 12, color: "#A9AFC3", fontWeight: 600 }}>Excellent potential</span>
+        </div>
+      </section>
+
+      {/* ── HOW IT WORKS ── */}
+      <section id="how" style={{ maxWidth: 1120, margin: "0 auto", padding: "clamp(48px,8vh,90px) 24px" }}>
+        <div style={{ textAlign: "center", marginBottom: 48 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: ".16em", color: "#8494FF", marginBottom: 12 }}>HOW IT WORKS</div>
+          <h2 style={{ margin: 0, fontSize: "clamp(28px,3.6vw,40px)", fontWeight: 800, letterSpacing: "-.02em", color: "#fff" }}>From idea to owned domain in three steps</h2>
+        </div>
+        <div style={{ display: "flex", gap: 22, flexWrap: "wrap" }}>
+          {STEPS.map(s => (
+            <div key={s.n} style={{ flex: "1 1 280px", padding: 28, borderRadius: 18, background: "rgba(21,24,39,.6)", border: "1px solid rgba(255,255,255,.07)", position: "relative", overflow: "hidden" }}>
+              <div style={{ position: "absolute", top: -18, right: -6, fontSize: 96, fontWeight: 800, color: "rgba(99,103,255,.07)", lineHeight: 1 }}>{s.n}</div>
+              <div style={{ width: 48, height: 48, borderRadius: 13, background: s.iconBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, marginBottom: 18, position: "relative" }}>{s.icon}</div>
+              <h3 style={{ margin: "0 0 9px", fontSize: 19, fontWeight: 700, color: "#fff" }}>{s.title}</h3>
+              <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.6, color: "#9aa0b4" }}>{s.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── EXAMPLES / RESULTS ── */}
+      <section ref={resultsRef} id="examples" style={{ maxWidth: 1120, margin: "0 auto", padding: "8px 24px clamp(56px,9vh,100px)" }}>
+        <div style={{ textAlign: "center", marginBottom: 14 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: ".16em", color: "#8494FF", marginBottom: 12 }}>
+            {generating ? "GENERATING" : "LIVE EXAMPLE"}
+          </div>
+          <h2 style={{ margin: "0 0 8px", fontSize: "clamp(28px,3.6vw,40px)", fontWeight: 800, letterSpacing: "-.02em", color: "#fff" }}>
+            {generating ? "Crafting your shortlist…" : "Names you could own today"}
+          </h2>
+          <p style={{ margin: "0 auto", maxWidth: 560, fontSize: 15, color: "#9aa0b4" }}>
+            {generating
+              ? "We generate, score, pre-check trademarks and verify domains in parallel."
+              : "A sample run. Each name is scored, trademark-checked, and matched to available domains."}
+          </p>
+        </div>
+
+        {/* progress bar */}
+        {generating && (
+          <div style={{ maxWidth: 520, margin: "26px auto 30px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 12 }}>
+              <Spinner size={15} />
+              <span style={{ fontSize: 14, fontWeight: 600, color: "#C9CCDA" }}>{prog.label}</span>
+            </div>
+            <div style={{ height: 6, borderRadius: 100, background: "rgba(255,255,255,.07)", overflow: "hidden" }}>
+              <div style={{ height: "100%", width: prog.pct, borderRadius: 100, background: "linear-gradient(90deg,#6367FF,#8494FF)", boxShadow: "0 0 14px rgba(99,103,255,.6)", transition: "width .6s ease" }} />
+            </div>
+          </div>
+        )}
+
+        {/* filter chips */}
+        {showFilters && (
+          <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", margin: "24px 0 26px" }}>
+            {(["all", "available", "lowrisk"] as Filter[]).map(f => {
+              const labels: Record<Filter, string> = { all: "All", available: ".com available", lowrisk: "Low risk" }
+              const active = filter === f
+              return (
+                <button key={f} onClick={() => setFilter(f)} style={{ height: 36, padding: "0 16px", borderRadius: 100, fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", background: active ? "#6367FF" : "rgba(255,255,255,.04)", color: active ? "#fff" : "#A9AFC3", border: `1px solid ${active ? "#6367FF" : "rgba(255,255,255,.1)"}` }}>
+                  {labels[f]}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {/* skeleton cards */}
+        {showSkeleton && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(330px,1fr))", gap: 20, marginTop: 30 }}>
+            {Array.from({ length: Math.min(count, POOL.length) }).map((_, i) => <SkeletonCard key={i} />)}
+          </div>
+        )}
+
+        {/* name cards */}
+        {showCards && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))", gap: 20, marginTop: 8 }}>
+            {filteredCards.map((entry, i) => (
+              <NameCard
+                key={entry.name}
+                entry={entry}
+                cardIdx={visiblePool.indexOf(entry)}
+                domLoading={domLoading}
+                tmLoading={tmLoading}
+                expanded={!!expanded[i]}
+                buyOpen={buyOpen}
+                onToggleExpand={() => setExpanded(ex => ({ ...ex, [i]: !ex[i] }))}
+                onToggleBuy={toggleBuy}
+              />
+            ))}
+          </div>
+        )}
+
+        {showFilters && filteredCards.length === 0 && (
+          <div style={{ textAlign: "center", padding: "60px 20px", color: "#737a8f" }}>
+            <Image src="/mascot.png" alt="mascot" width={80} height={80} style={{ opacity: .4, marginBottom: 14 }} />
+            <div style={{ fontSize: 15, fontWeight: 600 }}>No names match this filter.</div>
+          </div>
+        )}
+
+        <p style={{ textAlign: "center", margin: "34px auto 0", maxWidth: 540, fontSize: 12.5, color: "#5b6275", lineHeight: 1.6 }}>
+          AINameGenius provides domain and trademark pre-checks, not legal advice. Always confirm availability before registering.
+        </p>
+      </section>
+
+      {/* ── FOOTER ── */}
+      <footer style={{ borderTop: "1px solid rgba(255,255,255,.07)", padding: "40px clamp(20px,5vw,64px)" }}>
+        <div style={{ maxWidth: 1120, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Image src="/mascot.png" alt="mascot" width={30} height={30} style={{ objectFit: "contain" }} />
+            <span style={{ fontSize: 16, fontWeight: 800 }}>
+              <span style={{ color: "#8494FF" }}>AI</span>Name<span style={{ color: "#6367FF" }}>Genius</span>
+            </span>
+            <span style={{ fontSize: 12, color: "#5b6275", marginLeft: 8 }}>Smart names. Verified potential.</span>
+          </div>
+          <div style={{ display: "flex", gap: 22, flexWrap: "wrap" }}>
+            {["Privacy", "Terms", "Contact"].map(l => (
+              <a key={l} href="#" style={{ color: "#9aa0b4", textDecoration: "none", fontSize: 13, fontWeight: 600 }}>{l}</a>
+            ))}
+            <span style={{ color: "#5b6275", fontSize: 13 }}>© 2026 AINameGenius</span>
+          </div>
+        </div>
+      </footer>
+    </div>
+  )
+}

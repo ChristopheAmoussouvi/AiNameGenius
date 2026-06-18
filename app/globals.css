@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { box-sizing: border-box; }
+body { margin: 0; background: #0B0E19; -webkit-font-smoothing: antialiased; }
+select option { background: #1F2433; color: #F2F1FF; }
+::placeholder { color: #5b6275; }
+
+@keyframes ang-float  { 0%,100%{transform:translateY(0)}  50%{transform:translateY(-14px)} }
+@keyframes ang-shimmer{ 0%{background-position:-200% 0}   100%{background-position:200% 0} }
+@keyframes ang-spin   { to{transform:rotate(360deg)} }
+@keyframes ang-up     { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+@keyframes ang-pulse  { 0%,100%{opacity:.55} 50%{opacity:.9} }
+
+.spin    { animation: ang-spin    .7s linear infinite }
+.float-a { animation: ang-float   6s  ease-in-out infinite }
+.float-b { animation: ang-float   7.5s ease-in-out infinite }
+.shimmer { animation: ang-shimmer 1.4s infinite; background-size: 200% 100% }
