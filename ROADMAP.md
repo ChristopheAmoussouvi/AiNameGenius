@@ -1,6 +1,6 @@
 # AINameGenius — Roadmap
 
-_Dernière mise à jour : 18 juin 2026 — auto-mis à jour à chaque commit_
+_Dernière mise à jour : 18 juin 2026 — Sprint 1 backend ✅ complet — auto-mis à jour à chaque commit_
 
 ## Statut de déploiement
 
@@ -40,8 +40,8 @@ _Dernière mise à jour : 18 juin 2026 — auto-mis à jour à chaque commit_
 - [x] Route `/trademarks` connectée — persiste dans `trademark_results`
 - [x] Migration `0003_trademark_unique.sql` — contrainte unique pour upsert
 - [x] `fast-xml-parser` ajouté dans `package.json`
-- [ ] **ACTION CRITIQUE** : Ajouter `INPI_USERNAME` et `INPI_PASSWORD` dans Vercel env vars (Settings → Environment Variables)
-- [ ] **ACTION CRITIQUE** : Appliquer la migration `0003` dans le SQL Editor Supabase
+- [x] Ajouter `INPI_USERNAME` et `INPI_PASSWORD` dans Vercel env vars
+- [x] Appliquer la migration `0003` dans Supabase SQL Editor
 
 ### Frontend
 - [ ] Page d'accueil + formulaire brief
