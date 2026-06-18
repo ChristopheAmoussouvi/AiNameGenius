@@ -1,15 +1,13 @@
-// INPI API Gateway — https://api-gateway.inpi.fr
-// Docs: https://api-gateway.inpi.fr/docs
+// INPI API Gateway — Diffusion PI
+// Service: apidiffusion — https://api-gateway.inpi.fr/services/apidiffusion
+// Swagger: https://api-gateway.inpi.fr/swagger-ui/index.html (select "apidiffusion")
 //
-// Auth: OAuth2 resource-owner password flow
-//   POST /oauth/token  { username, password, grant_type: "password" }
-//   → { access_token, expires_in }
+// Auth: JHipster UAA — OAuth2 password grant via gateway
+//   POST /oauth/token (client: web_app / changeit)
 //
 // Required env vars:
 //   INPI_USERNAME=amoussouvichris+ainamegenius@gmail.com
 //   INPI_PASSWORD=<your password>
-//
-// The token is cached in-process (valid for ~3600s).
 
 export type TrademarkRisk = "clear" | "caution" | "conflict" | "incomplete"
 
@@ -27,11 +25,15 @@ export type TrademarkResult = {
   source: "inpi"
 }
 
-const BASE = "https://api-gateway.inpi.fr"
-const TOKEN_URL = `${BASE}/oauth/token`
-const TIMEOUT_MS = 10_000
+const GATEWAY = "https://api-gateway.inpi.fr"
+const TOKEN_URL = `${GATEWAY}/oauth/token`
+const SEARCH_URL = `${GATEWAY}/services/apidiffusion/api/marques/search`
+const TIMEOUT_MS = 12_000
 
-// In-process token cache (reset on cold start)
+// JHipster default client credentials (base64 of "web_app:changeit")
+const CLIENT_BASIC = "d2ViX2FwcDpjaGFuZ2VpdA=="
+
+// In-process token cache (resets on cold start / Vercel function restart)
 let cachedToken: string | null = null
 let tokenExpiresAt = 0
 
@@ -45,11 +47,15 @@ async function getToken(): Promise<string | null> {
   try {
     const res = await fetch(TOKEN_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${CLIENT_BASIC}`,
+      },
       body: new URLSearchParams({
         grant_type: "password",
         username,
         password,
+        scope: "openid",
       }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
@@ -86,43 +92,71 @@ export async function checkTrademarkInpi(name: string): Promise<TrademarkResult>
   }
 
   try {
-    // Marques endpoint — adjust path once confirmed in /docs
-    const url = new URL(`${BASE}/api/v1/marques`)
-    url.searchParams.set("q", name)
-    url.searchParams.set("range", "0-9")
-    url.searchParams.set("sort", "score")
+    const body = {
+      denomination: name,
+      office: ["FR", "EU"],
+      from: 0,
+      size: 10,
+    }
 
-    const res = await fetch(url.toString(), {
+    const res = await fetch(SEARCH_URL, {
+      method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
         Accept: "application/json",
       },
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
 
     if (res.status === 401) {
-      cachedToken = null // force refresh next call
-      console.error("[trademark/inpi] 401 — token may be expired")
+      cachedToken = null
+      console.error("[trademark/inpi] 401 — token expired, will refresh next call")
       return { risk: "incomplete", total: 0, hits: [], source: "inpi" }
     }
 
     if (!res.ok) {
-      console.error(`[trademark/inpi] API error ${res.status}`)
+      console.error(`[trademark/inpi] search error ${res.status}`)
       return { risk: "incomplete", total: 0, hits: [], source: "inpi" }
     }
 
     const data = await res.json()
 
+    // Response shape: { total, results: [...] } or { hits: { total, hits: [...] } }
+    // Adjust once confirmed from Swagger UI "Try it out"
     const trademarks: Array<Record<string, unknown>> =
-      data?.marques ?? data?.hits ?? data?.results ?? data?.content ?? []
-    const total: number = data?.total ?? data?.totalElements ?? trademarks.length
+      data?.trademarks ??
+      data?.results ??
+      data?.hits?.hits ??
+      data?.content ??
+      []
 
-    const hits: TrademarkHit[] = trademarks.map((t) => ({
-      name: String(t.denomination ?? t.name ?? t.titre ?? t.label ?? ""),
-      status: String(t.etat ?? t.status ?? t.statut ?? ""),
-      applicationNumber: t.numeroDepot ? String(t.numeroDepot) : undefined,
-      classes: Array.isArray(t.classes) ? (t.classes as number[]) : undefined,
-    }))
+    const total: number =
+      data?.total ??
+      data?.hits?.total ??
+      data?.totalElements ??
+      trademarks.length
+
+    const hits: TrademarkHit[] = trademarks.map((t) => {
+      const denomination =
+        t.denomination ??
+        t.markLabel ??
+        t.trademarkName ??
+        t.name ??
+        t.titre ??
+        ""
+      return {
+        name: String(denomination),
+        status: String(t.status ?? t.etat ?? t.statusLabel ?? ""),
+        applicationNumber: t.applicationNumber
+          ? String(t.applicationNumber)
+          : t.numeroDepot
+            ? String(t.numeroDepot)
+            : undefined,
+        classes: Array.isArray(t.classes) ? (t.classes as number[]) : undefined,
+      }
+    })
 
     const hasExact = hits.some((h) => isExactMatch(h.name, name))
     const hasSimilar = hits.some((h) => isSimilar(h.name, name))
@@ -138,7 +172,7 @@ export async function checkTrademarkInpi(name: string): Promise<TrademarkResult>
 
     return { risk, total, hits, source: "inpi" }
   } catch (err) {
-    console.error("[trademark/inpi] fetch failed:", err)
+    console.error("[trademark/inpi] search failed:", err)
     return { risk: "incomplete", total: 0, hits: [], source: "inpi" }
   }
 }
