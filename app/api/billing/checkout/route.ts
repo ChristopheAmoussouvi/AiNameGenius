@@ -1,6 +1,6 @@
 import { requireUserId } from "@/lib/auth/current-user"
 import { ok, fail } from "@/lib/api/response"
-import { stripe, stripeEnabled } from "@/lib/stripe/client"
+import { getStripe, stripeEnabled } from "@/lib/stripe/client"
 import { getPack } from "@/lib/billing/packs"
 import { z } from "zod"
 
@@ -34,6 +34,7 @@ export async function POST(req: Request) {
   const base = process.env.APP_BASE_URL ?? new URL(req.url).origin
 
   try {
+    const stripe = getStripe()
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       client_reference_id: auth.userId,

@@ -1,11 +1,16 @@
 import Stripe from "stripe"
 
-const secret = process.env.STRIPE_SECRET_KEY
+let client: Stripe | null = null
 
-// apiVersion is intentionally omitted — the SDK pins a compatible default,
-// which avoids the version-literal type mismatch on upgrades.
-export const stripe = new Stripe(secret ?? "")
+// Lazy init — never construct Stripe at module load (it throws without a key,
+// which would break `next build` page-data collection when the key is unset).
+export function getStripe(): Stripe {
+  const secret = process.env.STRIPE_SECRET_KEY
+  if (!secret) throw new Error("Missing STRIPE_SECRET_KEY")
+  if (!client) client = new Stripe(secret)
+  return client
+}
 
 export function stripeEnabled(): boolean {
-  return Boolean(secret)
+  return Boolean(process.env.STRIPE_SECRET_KEY)
 }

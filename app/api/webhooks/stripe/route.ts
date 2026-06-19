@@ -1,5 +1,5 @@
 import { ok, fail } from "@/lib/api/response"
-import { stripe, stripeEnabled } from "@/lib/stripe/client"
+import { getStripe, stripeEnabled } from "@/lib/stripe/client"
 import { supabaseAdmin } from "@/lib/supabase/server"
 import { grantCredits } from "@/lib/credits/ledger"
 import type Stripe from "stripe"
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
 
   let event: Stripe.Event
   try {
-    event = stripe.webhooks.constructEvent(rawBody, signature, secret)
+    event = getStripe().webhooks.constructEvent(rawBody, signature, secret)
   } catch (err) {
     const message = err instanceof Error ? err.message : "Invalid signature"
     return fail("BAD_REQUEST", `Webhook signature verification failed: ${message}`, 400)
