@@ -1,6 +1,6 @@
 # AINameGenius — Roadmap
 
-_Dernière mise à jour : 19 juin 2026 — Sprint 2 — brand kit + génération de logos (Gemini) déployés_
+_Dernière mise à jour : 19 juin 2026 — Sprint 3 — Stripe (packs de crédits) + gating crédits déployés_
 
 ## Statut de déploiement
 
@@ -18,7 +18,8 @@ _Dernière mise à jour : 19 juin 2026 — Sprint 2 — brand kit + génération
 | Page projet /projects/[id] | ✅ Déployée |
 | Historique /projects | ✅ Déployé |
 | Brand kit (palette/typo/tagline) | ✅ Déployé |
-| Génération de logos (Gemini) | ✅ Déployé (clé + bucket à config) |
+| Génération de logos (Gemini) | ✅ Déployé (clé configurée) |
+| Stripe packs de crédits | ✅ Déployé (clés Stripe + migration 0005 à config) |
 
 ---
 
@@ -85,9 +86,15 @@ _Dernière mise à jour : 19 juin 2026 — Sprint 2 — brand kit + génération
 
 ## Sprint 3 — Monétisation (semaine 5-6)
 
-- [ ] Stripe Checkout + webhooks
-- [ ] Plans Free / Pro / Business
-- [ ] Système de crédits complet
+- [x] Modèle retenu : **packs de crédits** (achat unique, pas d'abonnement)
+- [x] Stripe Checkout one-time (`/api/billing/checkout`, prix inline) + page `/pricing`
+- [x] Webhook Stripe (vérif signature raw body, crédit du compte, idempotent)
+- [x] Système de crédits : migration 0005 (trigger users + backfill + `spend_credits`/`grant_credits` atomiques)
+- [x] Gating crédits : génération noms (1), brand kit (5), logos (3) — 402 + remboursement auto en cas d'échec
+- [x] `GET /api/me` (solde) + badges crédits/Buy dans les navs + bannière succès d'achat
+- [x] **Fix bug latent** : `public.users` non créé à l'inscription (FK projects cassée) — corrigé par le trigger
+- [ ] **À faire (manuel)** : exécuter `migrations/0005_credits_and_users.sql` + `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` dans Vercel + endpoint webhook Stripe
+- [ ] Packs : Starter 50/9€ · Pro 150/19€ · Business 500/49€ (modifiables dans `lib/billing/packs.ts`)
 
 ---
 
