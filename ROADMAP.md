@@ -1,6 +1,6 @@
 # AINameGenius — Roadmap
 
-_Dernière mise à jour : 19 juin 2026 — Sprint 2 en cours — domaine ainamegenius.com configuré_
+_Dernière mise à jour : 19 juin 2026 — Sprint 2 — brand kit + génération de logos (Gemini) déployés_
 
 ## Statut de déploiement
 
@@ -17,6 +17,8 @@ _Dernière mise à jour : 19 juin 2026 — Sprint 2 en cours — domaine ainameg
 | Pages auth /login /signup | ✅ Déployées |
 | Page projet /projects/[id] | ✅ Déployée |
 | Historique /projects | ✅ Déployé |
+| Brand kit (palette/typo/tagline) | ✅ Déployé |
+| Génération de logos (Gemini) | ✅ Déployé (clé + bucket à config) |
 
 ---
 
@@ -72,8 +74,10 @@ _Dernière mise à jour : 19 juin 2026 — Sprint 2 en cours — domaine ainameg
 - [x] Historique `/projects` — liste des projets sauvegardés
 - [x] Composants de carte extraits dans `components/results.tsx` (partagés landing + projet)
 - [x] Fix bug merge trademark (`tmJson.data.results` au lieu de `tmJson.data`)
-- [ ] Génération de logos (Stability AI ou Replicate)
-- [ ] Brand kit (couleurs, polices, tagline)
+- [x] Brand kit — palette, typographie (Google Fonts), tagline, ton de voix (OpenRouter)
+- [x] Génération de logos — Google Gemini (`gemini-2.5-flash-image`), 3 concepts, stockés dans Supabase Storage
+- [x] Route `/brand-kit` synchrone + `/logo` (régénérer) ; composant `BrandKit.tsx` ; section sur `/projects/[id]`
+- [ ] **À faire (manuel)** : exécuter `migrations/0004_brand_assets.sql` dans Supabase + ajouter `GEMINI_API_KEY` dans Vercel
 - [ ] Rapport PDF téléchargeable
 - [ ] Page profil utilisateur / historique des projets
 
