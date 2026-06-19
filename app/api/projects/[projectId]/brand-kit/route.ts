@@ -55,10 +55,10 @@ export async function POST(
     let logos: BrandLogo[] = []
     if (geminiImageEnabled()) {
       const settled = await Promise.allSettled(
-        logoStyles.map(async (style) => {
+        logoStyles.map(async (style): Promise<BrandLogo> => {
           const img = await generateImage(buildLogoPrompt({ name, brief, primaryHex, style }))
           const url = await uploadBase64Image(img.base64, img.mimeType, `${projectId}/${style}`)
-          return { url, style } satisfies BrandLogo
+          return { url, style }
         }),
       )
       logos = settled

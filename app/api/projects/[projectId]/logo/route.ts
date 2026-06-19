@@ -50,10 +50,10 @@ export async function POST(
 
   try {
     const settled = await Promise.allSettled(
-      styles.map(async (style) => {
+      styles.map(async (style): Promise<BrandLogo> => {
         const img = await generateImage(buildLogoPrompt({ name: kit.name, brief, primaryHex, style }))
         const url = await uploadBase64Image(img.base64, img.mimeType, `${projectId}/${style}`)
-        return { url, style } satisfies BrandLogo
+        return { url, style }
       }),
     )
     const logos = settled
