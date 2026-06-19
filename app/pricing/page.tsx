@@ -82,7 +82,7 @@ export default function PricingPage() {
                 ≈ {pack.credits} name batches · {Math.floor(pack.credits / 5)} brand kits
               </div>
               <button onClick={() => buy(pack.id)} disabled={busy !== null} style={{
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 8, height: 48, marginTop: 22, border: "none", borderRadius: 13,
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 8, height: 48, marginTop: 22, borderRadius: 13,
                 background: busy === pack.id ? "#3a3e63" : pack.highlight ? "linear-gradient(95deg,#6367FF,#8494FF)" : "rgba(255,255,255,.08)",
                 color: "#fff", fontFamily: "inherit", fontSize: 15, fontWeight: 700, cursor: busy ? "default" : "pointer",
                 border: pack.highlight ? "none" : "1px solid rgba(255,255,255,.14)",
