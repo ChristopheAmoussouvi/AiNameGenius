@@ -119,6 +119,7 @@ export default function HomePage() {
   const [expanded, setExpanded] = useState<Record<number, boolean>>({})
   const [buyOpen, setBuyOpen]   = useState<string | null>(null)
   const [livePool, setLivePool] = useState<PoolEntry[] | null>(null)
+  const [genError, setGenError] = useState<string | null>(null)
 
   const resultsRef = useRef<HTMLElement>(null)
   const timers     = useRef<ReturnType<typeof setTimeout>[]>([])
@@ -132,6 +133,7 @@ export default function HomePage() {
     setExpanded({})
     setBuyOpen(null)
     setLivePool(null)
+    setGenError(null)
     requestAnimationFrame(() => {
       if (resultsRef.current) {
         const y = resultsRef.current.getBoundingClientRect().top + window.scrollY - 70
@@ -165,6 +167,11 @@ export default function HomePage() {
         method: "POST", headers: h,
         body: JSON.stringify({ count }),
       })
+      if (genRes.status === 402) {
+        setGenError("Plus de crédits — achète un pack pour générer des noms.")
+        setPhase("done")
+        return
+      }
       if (!genRes.ok) throw new Error("generate failed")
       const { data: genData } = await genRes.json()
       const candidates: Array<{ id: string; name: string; rationale: string }> = genData.candidates ?? []
@@ -239,6 +246,7 @@ export default function HomePage() {
           {user ? (
             <>
               <Link href="/projects" style={{ color: "#C9CCDA", textDecoration: "none", fontSize: 14, fontWeight: 600 }}>My projects</Link>
+              <Link href="/pricing" style={{ color: "#C9CCDA", textDecoration: "none", fontSize: 14, fontWeight: 600 }}>Buy credits</Link>
               <span style={{ fontSize: 13.5, color: "#8a90a4", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</span>
               <button onClick={() => signOut()} style={{ height: 36, padding: "0 16px", borderRadius: 9, background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.12)", color: "#C9CCDA", fontFamily: "inherit", fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}>Sign out</button>
             </>
@@ -366,6 +374,14 @@ export default function HomePage() {
               : "A sample run. Each name is scored, trademark-checked, and matched to available domains."}
           </p>
         </div>
+
+        {/* credits error */}
+        {genError && !generating && (
+          <div style={{ maxWidth: 520, margin: "20px auto 0", padding: "13px 16px", borderRadius: 12, background: "rgba(255,207,149,.1)", border: "1px solid rgba(255,207,149,.3)", display: "flex", alignItems: "center", justifyContent: "center", gap: 12, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 13.5, fontWeight: 600, color: "#FFCF95" }}>{genError}</span>
+            <Link href="/pricing" style={{ display: "inline-flex", alignItems: "center", height: 34, padding: "0 14px", borderRadius: 9, background: "#6367FF", color: "#fff", textDecoration: "none", fontSize: 13, fontWeight: 700 }}>Acheter des crédits →</Link>
+          </div>
+        )}
 
         {/* progress bar */}
         {generating && (

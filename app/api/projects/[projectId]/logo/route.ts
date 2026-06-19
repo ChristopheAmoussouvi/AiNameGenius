@@ -5,6 +5,8 @@ import { generateImage, geminiImageEnabled } from "@/lib/images/gemini"
 import { uploadBase64Image } from "@/lib/storage/upload"
 import { buildLogoPrompt, LOGO_STYLES, type LogoStyle } from "@/lib/prompts/brandkit"
 import { trackEvent } from "@/lib/events/track"
+import { spendCredits, grantCredits } from "@/lib/credits/ledger"
+import { CREDIT_COSTS } from "@/lib/credits/costs"
 import type { BrandKitData, BrandLogo, ProjectBrief } from "@/types/ainamegenius"
 
 export const runtime = "nodejs"
@@ -48,6 +50,24 @@ export async function POST(
     kit.palette.find((c) => c.role === "primary")?.hex ?? kit.palette[0]?.hex ?? "#6367FF"
   const styles: LogoStyle[] = LOGO_STYLES
 
+  const spend = await spendCredits({
+    userId: auth.userId,
+    projectId,
+    amount: CREDIT_COSTS.logo_regen,
+    reason: "logo_regen",
+  })
+  if (!spend.ok) {
+    return fail("PAYMENT_REQUIRED", "Not enough credits to regenerate logos.", 402)
+  }
+
+  const refund = () =>
+    grantCredits({
+      userId: auth.userId,
+      projectId,
+      amount: CREDIT_COSTS.logo_regen,
+      reason: "refund:logo_regen",
+    }).catch(() => {})
+
   try {
     const settled = await Promise.allSettled(
       styles.map(async (style): Promise<BrandLogo> => {
@@ -61,6 +81,7 @@ export async function POST(
       .map((r) => r.value)
 
     if (logos.length === 0) {
+      await refund()
       return fail("UPSTREAM_ERROR", "Logo generation failed. Please try again.", 502)
     }
 
@@ -82,6 +103,7 @@ export async function POST(
 
     return ok(data)
   } catch (err) {
+    await refund()
     const message = err instanceof Error ? err.message : "Unknown error"
     return fail("INTERNAL_ERROR", `Logo generation failed: ${message}`, 500)
   }

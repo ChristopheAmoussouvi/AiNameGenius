@@ -7,6 +7,7 @@ export type ApiErrorCode =
   | "NOT_FOUND"
   | "RATE_LIMITED"
   | "CONFLICT"
+  | "PAYMENT_REQUIRED"
   | "INTERNAL_ERROR"
   | "UPSTREAM_ERROR"
 

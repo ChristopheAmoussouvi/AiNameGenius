@@ -6,6 +6,8 @@ import { generateNameCandidates, scoreNameCandidates } from "@/lib/llm/naming"
 import { computeScore } from "@/lib/scoring/score"
 import { GenerateNamesSchema } from "@/lib/validation/project"
 import { trackEvent } from "@/lib/events/track"
+import { spendCredits, grantCredits } from "@/lib/credits/ledger"
+import { CREDIT_COSTS } from "@/lib/credits/costs"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
@@ -43,6 +45,16 @@ export async function POST(
 
   const { count } = parsed.data
   const brief = project.brief
+
+  const spend = await spendCredits({
+    userId: auth.userId,
+    projectId,
+    amount: CREDIT_COSTS.name_generation,
+    reason: "name_generation",
+  })
+  if (!spend.ok) {
+    return fail("PAYMENT_REQUIRED", "Not enough credits. Buy more to generate names.", 402)
+  }
 
   try {
     const candidates = await generateNameCandidates(brief, count)
@@ -109,6 +121,13 @@ export async function POST(
       scored: scoreInserts.length,
     })
   } catch (err) {
+    // Refund the credit if generation failed.
+    await grantCredits({
+      userId: auth.userId,
+      projectId,
+      amount: CREDIT_COSTS.name_generation,
+      reason: "refund:name_generation",
+    }).catch(() => {})
     const message = err instanceof Error ? err.message : "Unknown error"
     return fail("INTERNAL_ERROR", `Generation failed: ${message}`, 500)
   }

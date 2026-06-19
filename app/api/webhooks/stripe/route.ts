@@ -1,40 +1,51 @@
-import { fail, ok } from "@/lib/api/response"
+import { ok, fail } from "@/lib/api/response"
+import { stripe, stripeEnabled } from "@/lib/stripe/client"
+import { supabaseAdmin } from "@/lib/supabase/server"
+import { grantCredits } from "@/lib/credits/ledger"
+import type Stripe from "stripe"
 
-// TODO: install stripe SDK and verify webhook signature
-// import Stripe from "stripe"
-// const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
+export const runtime = "nodejs"
 
 export async function POST(req: Request) {
+  if (!stripeEnabled()) {
+    return fail("INTERNAL_ERROR", "Payments are not configured.", 503)
+  }
+
   const signature = req.headers.get("stripe-signature")
-  if (!signature) {
-    return fail("BAD_REQUEST", "Missing stripe-signature header.", 400)
+  const secret = process.env.STRIPE_WEBHOOK_SECRET
+  if (!signature || !secret) {
+    return fail("BAD_REQUEST", "Missing stripe-signature header or webhook secret.", 400)
   }
 
-  // TODO: verify signature
-  // const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
-  // const body = await req.text()
-  // const event = stripe.webhooks.constructEvent(body, signature, webhookSecret)
+  // Stripe signature verification requires the raw, unparsed request body.
+  const rawBody = await req.text()
 
-  let event: { type: string; data: { object: Record<string, unknown> } }
+  let event: Stripe.Event
   try {
-    event = await req.json()
-  } catch {
-    return fail("BAD_REQUEST", "Invalid JSON payload.", 400)
+    event = stripe.webhooks.constructEvent(rawBody, signature, secret)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Invalid signature"
+    return fail("BAD_REQUEST", `Webhook signature verification failed: ${message}`, 400)
   }
 
-  switch (event.type) {
-    case "checkout.session.completed": {
-      // TODO: credit user account
-      const session = event.data.object
-      console.log("Checkout completed:", session)
-      break
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object as Stripe.Checkout.Session
+    const userId = session.metadata?.userId
+    const credits = Number(session.metadata?.credits ?? 0)
+    const reason = `stripe:${session.id}`
+
+    if (userId && credits > 0 && session.payment_status === "paid") {
+      // Idempotency — Stripe may retry; only credit a session once.
+      const { data: existing } = await supabaseAdmin
+        .from("credits_ledger")
+        .select("id")
+        .eq("reason", reason)
+        .maybeSingle()
+
+      if (!existing) {
+        await grantCredits({ userId, amount: credits, reason })
+      }
     }
-    case "invoice.payment_succeeded": {
-      // TODO: handle subscription renewal credits
-      break
-    }
-    default:
-      console.log(`Unhandled Stripe event: ${event.type}`)
   }
 
   return ok({ received: true })

@@ -18,20 +18,37 @@ export default function ProjectsPage() {
   const { user, session, signOut, loading: authLoading } = useAuth()
 
   const [projects, setProjects] = useState<ProjectRow[]>([])
+  const [credits, setCredits]   = useState<number | null>(null)
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState<string | null>(null)
+  const [purchased, setPurchased] = useState(false)
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("purchase") === "success") {
+      setPurchased(true)
+    }
+  }, [])
 
   useEffect(() => {
     if (authLoading) return
     if (!session) { router.push("/login"); return }
 
+    const h = { Authorization: `Bearer ${session.access_token}` }
     let cancelled = false
     ;(async () => {
       try {
-        const res = await fetch("/api/projects", { headers: { Authorization: `Bearer ${session.access_token}` } })
-        if (!res.ok) throw new Error("Failed to load projects.")
-        const { data } = await res.json()
-        if (!cancelled) { setProjects(data ?? []); setLoading(false) }
+        const [projRes, meRes] = await Promise.all([
+          fetch("/api/projects", { headers: h }),
+          fetch("/api/me", { headers: h }),
+        ])
+        if (!projRes.ok) throw new Error("Failed to load projects.")
+        const { data } = await projRes.json()
+        const me = meRes.ok ? (await meRes.json()).data : null
+        if (!cancelled) {
+          setProjects(data ?? [])
+          setCredits(me?.credits ?? 0)
+          setLoading(false)
+        }
       } catch (err) {
         if (!cancelled) { setError(err instanceof Error ? err.message : "Unknown error"); setLoading(false) }
       }
@@ -48,8 +65,11 @@ export default function ProjectsPage() {
             <span style={{ color: "#8494FF" }}>AI</span><span style={{ color: "#FFFFFF" }}>Name</span><span style={{ color: "#6367FF" }}>Genius</span>
           </span>
         </Link>
-        <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <Link href="/" style={{ color: "#A9AFC3", textDecoration: "none", fontSize: 14, fontWeight: 600 }}>New project</Link>
+          <Link href="/pricing" style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 34, padding: "0 13px", borderRadius: 100, background: "rgba(132,148,255,.12)", border: "1px solid rgba(132,148,255,.3)", color: "#8494FF", textDecoration: "none", fontSize: 13, fontWeight: 700 }}>
+            {credits !== null ? `${credits} credits` : "Credits"} · Buy
+          </Link>
           {user && <button onClick={() => signOut()} style={{ height: 36, padding: "0 16px", borderRadius: 9, background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.12)", color: "#C9CCDA", fontFamily: "inherit", fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}>Sign out</button>}
         </div>
       </nav>
@@ -62,6 +82,12 @@ export default function ProjectsPage() {
           </div>
           <Link href="/" style={{ display: "inline-flex", alignItems: "center", height: 44, padding: "0 20px", borderRadius: 11, background: "#6367FF", color: "#fff", textDecoration: "none", fontSize: 14, fontWeight: 700, boxShadow: "0 8px 22px rgba(99,103,255,.4)" }}>+ New project</Link>
         </div>
+
+        {purchased && (
+          <div style={{ marginBottom: 22, padding: "13px 16px", borderRadius: 12, background: "rgba(111,207,151,.1)", border: "1px solid rgba(111,207,151,.3)", display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, fontWeight: 600, color: "#6FCF97" }}>
+            <span>✓</span><span>Payment successful — your credits have been added.</span>
+          </div>
+        )}
 
         {authLoading || loading ? (
           <div style={{ textAlign: "center", padding: "70px 20px", color: "#737a8f", fontSize: 15 }}>Loading…</div>

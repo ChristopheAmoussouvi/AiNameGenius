@@ -175,8 +175,9 @@ export default function ProjectDetailPage() {
             <span style={{ color: "#8494FF" }}>AI</span><span style={{ color: "#FFFFFF" }}>Name</span><span style={{ color: "#6367FF" }}>Genius</span>
           </span>
         </Link>
-        <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <Link href="/projects" style={{ color: "#A9AFC3", textDecoration: "none", fontSize: 14, fontWeight: 600 }}>My projects</Link>
+          <Link href="/pricing" style={{ color: "#8494FF", textDecoration: "none", fontSize: 14, fontWeight: 700 }}>Buy credits</Link>
           {user && <button onClick={() => signOut()} style={{ height: 36, padding: "0 16px", borderRadius: 9, background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.12)", color: "#C9CCDA", fontFamily: "inherit", fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}>Sign out</button>}
         </div>
       </nav>
@@ -260,7 +261,12 @@ export default function ProjectDetailPage() {
           </div>
 
           {bkError && (
-            <div style={{ padding: "11px 15px", borderRadius: 11, background: "rgba(244,143,104,.1)", border: "1px solid rgba(244,143,104,.3)", fontSize: 13.5, color: "#F48F68", marginBottom: 18 }}>{bkError}</div>
+            <div style={{ padding: "11px 15px", borderRadius: 11, background: "rgba(244,143,104,.1)", border: "1px solid rgba(244,143,104,.3)", fontSize: 13.5, color: "#F48F68", marginBottom: 18, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <span>{bkError}</span>
+              {bkError.toLowerCase().includes("credit") && (
+                <Link href="/pricing" style={{ color: "#8494FF", fontWeight: 700, textDecoration: "none" }}>Buy credits →</Link>
+              )}
+            </div>
           )}
 
           {brandKit ? (

@@ -7,6 +7,8 @@ import { uploadBase64Image } from "@/lib/storage/upload"
 import { buildLogoPrompt, LOGO_STYLES, type LogoStyle } from "@/lib/prompts/brandkit"
 import { BrandKitRequestSchema } from "@/lib/validation/project"
 import { trackEvent } from "@/lib/events/track"
+import { spendCredits, grantCredits } from "@/lib/credits/ledger"
+import { CREDIT_COSTS } from "@/lib/credits/costs"
 import type { BrandKitData, BrandLogo, ProjectBrief } from "@/types/ainamegenius"
 
 export const runtime = "nodejs"
@@ -44,6 +46,16 @@ export async function POST(
   const { name, styles } = parsed.data
   const brief = project.brief as ProjectBrief
   const logoStyles: LogoStyle[] = styles ?? LOGO_STYLES
+
+  const spend = await spendCredits({
+    userId: auth.userId,
+    projectId,
+    amount: CREDIT_COSTS.brand_kit,
+    reason: "brand_kit",
+  })
+  if (!spend.ok) {
+    return fail("PAYMENT_REQUIRED", "Not enough credits to generate a brand kit.", 402)
+  }
 
   try {
     // 1. Brand kit text (palette, typography, tagline, voice) via OpenRouter LLM
@@ -93,6 +105,12 @@ export async function POST(
 
     return ok({ ...data, ...(warning && { warning }) })
   } catch (err) {
+    await grantCredits({
+      userId: auth.userId,
+      projectId,
+      amount: CREDIT_COSTS.brand_kit,
+      reason: "refund:brand_kit",
+    }).catch(() => {})
     const message = err instanceof Error ? err.message : "Unknown error"
     return fail("INTERNAL_ERROR", `Brand kit generation failed: ${message}`, 500)
   }
