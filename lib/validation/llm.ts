@@ -23,3 +23,28 @@ export const GenerateNamesResponseSchema = z.object({
 export const ScoreNamesResponseSchema = z.object({
   scores: z.record(z.string(), NameScoreSchema),
 })
+
+export const BrandKitResponseSchema = z.object({
+  tagline: z.string().min(1).max(120),
+  voice: z.string().min(1).max(240),
+  palette: z
+    .array(
+      z.object({
+        hex: z.string().regex(/^#[0-9a-fA-F]{6}$/, "must be #RRGGBB hex"),
+        role: z.string().min(1).max(40),
+        name: z.string().min(1).max(40),
+      }),
+    )
+    .min(3)
+    .max(6),
+  typography: z.object({
+    heading: z.object({
+      family: z.string().min(1).max(60),
+      weight: z.number().int().min(100).max(900),
+    }),
+    body: z.object({
+      family: z.string().min(1).max(60),
+      weight: z.number().int().min(100).max(900),
+    }),
+  }),
+})

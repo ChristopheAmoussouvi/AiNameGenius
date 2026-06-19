@@ -9,6 +9,8 @@ import {
   NameCard, TLD_ORDER,
   type PoolEntry, type TmRisk, type DomStatus,
 } from "@/components/results"
+import { BrandKit } from "@/components/BrandKit"
+import type { BrandKitData } from "@/types/ainamegenius"
 
 // ─── API row shapes ─────────────────────────────────────────────────────────
 
@@ -19,6 +21,7 @@ interface Score {
 }
 interface TrademarkRow { name: string; status: string }
 interface DomainRow { name: string; tld: string; status: string }
+interface BrandKitRow { data: BrandKitData | null }
 interface ProjectDetail {
   id: string
   name: string
@@ -27,6 +30,7 @@ interface ProjectDetail {
   name_candidates: Candidate[]
   scores: Score[]
   trademark_results: TrademarkRow[]
+  brand_kits: BrandKitRow[]
 }
 
 function buildPool(detail: ProjectDetail, domains: DomainRow[]): PoolEntry[] {
@@ -69,7 +73,52 @@ export default function ProjectDetailPage() {
   const [expanded, setExpanded] = useState<Record<number, boolean>>({})
   const [buyOpen, setBuyOpen]   = useState<string | null>(null)
 
+  const [brandKit, setBrandKit]       = useState<BrandKitData | null>(null)
+  const [selectedName, setSelectedName] = useState("")
+  const [bkGenerating, setBkGenerating] = useState(false)
+  const [bkRegenerating, setBkRegenerating] = useState(false)
+  const [bkError, setBkError]         = useState<string | null>(null)
+
   const toggleBuy = useCallback((key: string | null) => setBuyOpen(k => k === key ? null : key), [])
+
+  const generateBrandKit = useCallback(async () => {
+    if (!session || !selectedName) return
+    setBkGenerating(true)
+    setBkError(null)
+    try {
+      const res = await fetch(`/api/projects/${id}/brand-kit`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ name: selectedName }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error?.message ?? "Generation failed.")
+      setBrandKit(json.data)
+    } catch (err) {
+      setBkError(err instanceof Error ? err.message : "Unknown error")
+    } finally {
+      setBkGenerating(false)
+    }
+  }, [session, selectedName, id])
+
+  const regenerateLogos = useCallback(async () => {
+    if (!session) return
+    setBkRegenerating(true)
+    setBkError(null)
+    try {
+      const res = await fetch(`/api/projects/${id}/logo`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error?.message ?? "Regeneration failed.")
+      setBrandKit(json.data)
+    } catch (err) {
+      setBkError(err instanceof Error ? err.message : "Unknown error")
+    } finally {
+      setBkRegenerating(false)
+    }
+  }, [session, id])
 
   useEffect(() => {
     if (authLoading) return
@@ -90,7 +139,11 @@ export default function ProjectDetailPage() {
         setPool(buildPool(data, []))
         setLoading(false)
 
+        const existingKit = (data.brand_kits as BrandKitRow[] | undefined)?.[0]?.data ?? null
+        setBrandKit(existingKit)
+
         const names: string[] = (data.name_candidates as Candidate[]).map(c => c.name)
+        setSelectedName(existingKit?.name ?? names[0] ?? "")
         if (names.length === 0) { setDomLoading(false); return }
 
         const domRes = await fetch(`/api/projects/${id}/domains`, {
@@ -182,6 +235,46 @@ export default function ProjectDetailPage() {
             />
           ))}
         </div>
+      )}
+
+      {/* ── BRAND IDENTITY ── */}
+      {pool.length > 0 && (
+        <section style={{ marginTop: 48, paddingTop: 36, borderTop: "1px solid rgba(255,255,255,.08)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 22 }}>
+            <div>
+              <h2 style={{ margin: "0 0 4px", fontSize: "clamp(22px,3vw,30px)", fontWeight: 800, letterSpacing: "-.02em", color: "#fff" }}>Brand identity</h2>
+              <p style={{ margin: 0, fontSize: 14, color: "#9aa0b4" }}>Palette, typography, tagline and logo concepts for your chosen name.</p>
+            </div>
+            {!brandKit && (
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <select value={selectedName} onChange={e => setSelectedName(e.target.value)} disabled={bkGenerating}
+                  style={{ height: 44, padding: "0 12px", borderRadius: 11, background: "#0F1320", border: "1px solid rgba(255,255,255,.1)", color: "#F2F1FF", fontFamily: "inherit", fontSize: 14.5, fontWeight: 600, cursor: "pointer" }}>
+                  {detail.name_candidates.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
+                <button onClick={generateBrandKit} disabled={bkGenerating || !selectedName}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 8, height: 44, padding: "0 20px", border: "none", borderRadius: 11, background: bkGenerating ? "#3a3e63" : "linear-gradient(95deg,#6367FF,#8494FF)", color: "#fff", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: bkGenerating ? "default" : "pointer", boxShadow: "0 8px 22px rgba(99,103,255,.4)" }}>
+                  {bkGenerating ? "Generating… (~30s)" : "Generate brand identity →"}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {bkError && (
+            <div style={{ padding: "11px 15px", borderRadius: 11, background: "rgba(244,143,104,.1)", border: "1px solid rgba(244,143,104,.3)", fontSize: 13.5, color: "#F48F68", marginBottom: 18 }}>{bkError}</div>
+          )}
+
+          {brandKit ? (
+            <BrandKit data={brandKit} onRegenerate={regenerateLogos} regenerating={bkRegenerating} />
+          ) : bkGenerating ? (
+            <div style={{ textAlign: "center", padding: "50px 20px", color: "#9aa0b4", fontSize: 14.5 }}>
+              Designing your brand — palette, fonts, tagline and logo concepts…
+            </div>
+          ) : (
+            <div style={{ padding: "30px 24px", borderRadius: 16, background: "rgba(21,24,39,.5)", border: "1px dashed rgba(255,255,255,.12)", textAlign: "center", color: "#737a8f", fontSize: 14 }}>
+              Pick a name above and generate its full brand identity.
+            </div>
+          )}
+        </section>
       )}
 
       <p style={{ textAlign: "center", margin: "34px auto 0", maxWidth: 540, fontSize: 12.5, color: "#5b6275", lineHeight: 1.6 }}>

@@ -27,3 +27,8 @@ export const DomainCheckSchema = z.object({
   names: z.array(z.string().min(1)).min(1).max(50),
   tlds: z.array(z.enum([".com", ".net", ".org", ".io", ".co", ".ai", ".fr", ".eu"])).min(1).max(8),
 })
+
+export const BrandKitRequestSchema = z.object({
+  name: z.string().min(1).max(50),
+  styles: z.array(z.enum(["wordmark", "emblem", "abstract"])).min(1).max(3).optional(),
+})

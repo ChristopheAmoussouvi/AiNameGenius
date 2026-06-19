@@ -39,6 +39,35 @@ export interface DomainCheckResult {
   affiliateUrl?: string
 }
 
+export interface BrandPaletteColor {
+  hex: string
+  role: string
+  name: string
+}
+
+export interface BrandFont {
+  family: string
+  weight: number
+}
+
+export interface BrandKitContent {
+  tagline: string
+  voice: string
+  palette: BrandPaletteColor[]
+  typography: { heading: BrandFont; body: BrandFont }
+}
+
+export interface BrandLogo {
+  url: string
+  style: string
+}
+
+// Shape stored in brand_kits.data (jsonb)
+export interface BrandKitData extends BrandKitContent {
+  name: string
+  logos: BrandLogo[]
+}
+
 export interface JobPayload {
   jobId: string
   projectId: string
