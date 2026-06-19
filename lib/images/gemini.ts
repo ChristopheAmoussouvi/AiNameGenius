@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai"
+import { GoogleGenAI, Modality } from "@google/genai"
 
 // Gemini image generation ("Nano Banana"). Model is configurable; the 2.5 flash
 // image model is the stable default. See https://ai.google.dev/gemini-api/docs/image-generation
@@ -28,7 +28,7 @@ export async function generateImage(prompt: string): Promise<GeneratedImage> {
   const response = await ai.models.generateContent({
     model: MODEL,
     contents: prompt,
-    config: { responseModalities: ["TEXT", "IMAGE"] },
+    config: { responseModalities: [Modality.TEXT, Modality.IMAGE] },
   })
 
   const parts = response.candidates?.[0]?.content?.parts ?? []

@@ -39,7 +39,6 @@ export function BrandKit({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
       {/* Load the kit's Google Fonts so the previews are accurate */}
-      {/* eslint-disable-next-line @next/next/no-page-custom-font */}
       <link rel="stylesheet" href={googleFontHref(fonts)} />
 
       {/* tagline + voice */}

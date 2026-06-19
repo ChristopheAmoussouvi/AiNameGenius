@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react"
 import Image from "next/image"
+import Link from "next/link"
 import { useAuth } from "@/lib/auth/context"
 import {
   Spinner, SkeletonCard, NameCard, TLD_ORDER,
@@ -237,14 +238,14 @@ export default function HomePage() {
           <a href="#examples" style={{ color: "#A9AFC3", textDecoration: "none", fontSize: 14, fontWeight: 600 }}>Examples</a>
           {user ? (
             <>
-              <a href="/projects" style={{ color: "#C9CCDA", textDecoration: "none", fontSize: 14, fontWeight: 600 }}>My projects</a>
+              <Link href="/projects" style={{ color: "#C9CCDA", textDecoration: "none", fontSize: 14, fontWeight: 600 }}>My projects</Link>
               <span style={{ fontSize: 13.5, color: "#8a90a4", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</span>
               <button onClick={() => signOut()} style={{ height: 36, padding: "0 16px", borderRadius: 9, background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.12)", color: "#C9CCDA", fontFamily: "inherit", fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}>Sign out</button>
             </>
           ) : (
             <>
-              <a href="/login"  style={{ color: "#C9CCDA", textDecoration: "none", fontSize: 14, fontWeight: 600 }}>Log in</a>
-              <a href="/signup" style={{ display: "inline-flex", alignItems: "center", height: 40, padding: "0 18px", borderRadius: 10, background: "#6367FF", color: "#fff", textDecoration: "none", fontSize: 14, fontWeight: 700, boxShadow: "0 6px 22px rgba(99,103,255,.45)" }}>Sign up free</a>
+              <Link href="/login" style={{ color: "#C9CCDA", textDecoration: "none", fontSize: 14, fontWeight: 600 }}>Log in</Link>
+              <Link href="/signup" style={{ display: "inline-flex", alignItems: "center", height: 40, padding: "0 18px", borderRadius: 10, background: "#6367FF", color: "#fff", textDecoration: "none", fontSize: 14, fontWeight: 700, boxShadow: "0 6px 22px rgba(99,103,255,.45)" }}>Sign up free</Link>
             </>
           )}
         </div>
